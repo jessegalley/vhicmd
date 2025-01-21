@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bytes"
+	"fmt"
 	"io"
-	"log"
+
+	//	"log"
 
 	"github.com/jessegalley/vhicmd/internal/httpclient"
 )
@@ -12,60 +15,113 @@ type Payload interface {
 	MarshalJSON() ([]byte, error)
 }
 
+// ApiResponse represents the response from an API call
 type ApiResponse struct {
-  TokenHeader   string 
-  ResponseCode  int
-  Response      string
+	TokenHeader  string
+	ResponseCode int
+	Response     string
 }
 
-func call(url string, payload Payload) (ApiResponse, error) {
-  apiResp := ApiResponse{}
+//func call(url string, payload Payload) (ApiResponse, error) {
+//  apiResp := ApiResponse{}
+//
+//  jsonData, err := payload.MarshalJSON()
+//  if err != nil {
+//    log.Fatalf("error marshalling json payload: %v", err)
+//  }
+//
+//  resp, err := httpclient.SendRequest(url, jsonData)
+//  if err != nil {
+//    log.Fatalf("error making HTTP request: %v", err)
+//  }
+//  defer resp.Body.Close()
+//
+//  apiResp.ResponseCode = resp.StatusCode
 
-  jsonData, err := payload.MarshalJSON()
-  if err != nil {
-    log.Fatalf("error marshalling json payload: %v", err)
-  }
+//  if token := resp.Header.Get("X-Subject-Token"); token != "" {
+//    apiResp.TokenHeader = token
+//  }
 
-  resp, err := httpclient.SendRequest(url, jsonData)
-  if err != nil {
-    log.Fatalf("error making HTTP request: %v", err)
-  }
-  defer resp.Body.Close()
+//	body, err := io.ReadAll(resp.Body) // Read the full body
+//	if err != nil {
+//		log.Fatalf("Error reading body: %v", err)
+//	}
+//  apiResp.Response = string(body)
 
-  apiResp.ResponseCode = resp.StatusCode
+// var authResp AuthResponse
+// if resp.StatusCode == http.StatusOK {
+//   err = json.Unmarshal(body, &authResp)
+//   if err != nil {
+//     log.Fatalf("error unmarshalling json into auth resp, %v", err)
+//   }
+//   spew.Dump(authResp)
+//   fmt.Println("auth response okay!")
+//   return "auth response okay", nil
+// }
+//
+//
+// var authErr AuthError
+// if resp.StatusCode  != http.StatusOK {
+//   err = json.Unmarshal(body, &authErr)
+//   if err != nil {
+//     log.Fatalf("error unmarshalling json into auth error, %v", err)
+//   }
+//   spew.Dump(authErr)
+//   fmt.Println("auth error okay!")
+//   return "auth error dokay", nil
+// }
 
-  if token := resp.Header.Get("X-Subject-Token"); token != "" {
-    apiResp.TokenHeader = token
-  }
-	
-	body, err := io.ReadAll(resp.Body) // Read the full body
+//  return apiResp, nil
+//}
+
+// callPOST is a helper for POST requests. If you need to pass a token, supply it via the `token` parameter.
+func callPOST(url, token string, payload Payload) (ApiResponse, error) {
+	apiResp := ApiResponse{}
+
+	jsonData, err := payload.MarshalJSON()
 	if err != nil {
-		log.Fatalf("Error reading body: %v", err)
+		return apiResp, fmt.Errorf("error marshalling json payload: %v", err)
 	}
-  apiResp.Response = string(body)
 
-  // var authResp AuthResponse 
-  // if resp.StatusCode == http.StatusOK {
-  //   err = json.Unmarshal(body, &authResp)
-  //   if err != nil {
-  //     log.Fatalf("error unmarshalling json into auth resp, %v", err)
-  //   }
-  //   spew.Dump(authResp)
-  //   fmt.Println("auth response okay!")
-  //   return "auth response okay", nil
-  // }
-  //
-  //
-  // var authErr AuthError
-  // if resp.StatusCode  != http.StatusOK {
-  //   err = json.Unmarshal(body, &authErr)
-  //   if err != nil {
-  //     log.Fatalf("error unmarshalling json into auth error, %v", err)
-  //   }
-  //   spew.Dump(authErr)
-  //   fmt.Println("auth error okay!")
-  //   return "auth error dokay", nil
-  // }
+	resp, err := httpclient.SendRequestWithToken("POST", url, token, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return apiResp, fmt.Errorf("error making HTTP POST request: %v", err)
+	}
+	defer resp.Body.Close()
 
-  return apiResp, nil
+	apiResp.ResponseCode = resp.StatusCode
+
+	// Check if there's a token in the header
+	if token := resp.Header.Get("X-Subject-Token"); token != "" {
+		apiResp.TokenHeader = token
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return apiResp, fmt.Errorf("error reading response body: %v", err)
+	}
+	apiResp.Response = string(body)
+
+	return apiResp, nil
+}
+
+// callGET is a helper for GET requests that requires a token in the X-Auth-Token header.
+func callGET(url, token string) (ApiResponse, error) {
+	apiResp := ApiResponse{}
+
+	resp, err := httpclient.SendRequestWithToken("GET", url, token, nil)
+	if err != nil {
+		return apiResp, fmt.Errorf("error making HTTP GET request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	apiResp.ResponseCode = resp.StatusCode
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return apiResp, fmt.Errorf("error reading response body: %v", err)
+	}
+	apiResp.Response = string(body)
+
+	return apiResp, nil
 }
