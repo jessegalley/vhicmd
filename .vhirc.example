@@ -1,0 +1,8 @@
+username: username
+password: password
+domain: VHIDomain
+project: ProjectName
+flavor_id: ec790017-2a74-49a2-839f-33013ca8eda8
+host: panel-1.vhi.fqdn.com
+image_id: 2041f6ab-054b-4e36-83e1-e91580a58289
+networks: 46047ba4-a742-402c-8f4b-c68e837e39ed,66adf45f-71ab-4a44-b40b-5ad8748dbc00

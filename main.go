@@ -1,6 +1,5 @@
 /*
 Copyright © 2024 jesse galley jesse.galley@gmail.com
-
 */
 package main
 
