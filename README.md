@@ -2,6 +2,8 @@
 
 A command-line utility for interacting with VHI (Virtual Hosting Infrastructure) APIs. This tool provides a streamlined interface for managing virtual machines, volumes, networks.
 
+[skip to Cobbler netboot instructions](#using-cobbler-to-netboot-install-instances)
+
 ## Features
 
 - Resource listing (VMs, volumes, networks, flavors, images)
@@ -135,8 +137,6 @@ vhicmd netboot set <vm-id> true/false
 
 - `-H, --host`: Override the VHI host
 - `--json`: Output in JSON format instead of tables
-
-This is in lieu of using a configuration file.
 
 ## Using Cobbler to netboot install instances
 ```bash

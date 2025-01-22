@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -129,4 +130,14 @@ func validateTokenEndpoint(tok api.Token, endpoint string) (string, error) {
 		return "", fmt.Errorf("no '%s' endpoint found in token; re-auth or check your catalog", endpoint)
 	}
 	return url, nil
+}
+
+// readAndEncodeUserData() reads the user data file at the given path
+// Commonly used for cloud-init scripts
+func readAndEncodeUserData(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read user data file: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
 }

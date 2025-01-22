@@ -96,6 +96,14 @@ var createVMCmd = &cobra.Command{
 					"volume_type":           "nvme_ec7_2",
 				},
 			}
+			// Handle user data if provided
+			if flagUserData != "" {
+				userData, err := readAndEncodeUserData(flagUserData)
+				if err != nil {
+					return err
+				}
+				request.Server.UserData = userData
+			}
 		} else {
 			// Create blank volume if no image is specified
 			fmt.Printf("Creating blank boot volume for VM %s...\n", flagVMName)
@@ -231,6 +239,7 @@ var (
 	flagVolumeType        string
 	flagVMSize            int
 	flagVMNetboot         bool
+	flagUserData          string
 )
 
 func init() {
@@ -242,6 +251,7 @@ func init() {
 	createVMCmd.Flags().BoolVar(&flagJsonOutput, "json", false, "Output in JSON format (default: YAML)")
 	createVMCmd.Flags().IntVar(&flagVMSize, "size", 0, "Size in GB of boot volume")
 	createVMCmd.Flags().BoolVar(&flagVMNetboot, "netboot", true, "Enable network boot with blank volume")
+	createVMCmd.Flags().StringVar(&flagUserData, "user-data", "", "User data for cloud-init (file path)")
 
 	// Bind flags to viper
 	viper.BindPFlag("flavor_id", createVMCmd.Flags().Lookup("flavor"))
