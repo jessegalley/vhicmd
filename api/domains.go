@@ -16,11 +16,10 @@ type DomainListResponse struct {
 }
 
 // ListDomains calls GET /v3/domains using the token for authentication.
-func ListDomains(host, token string) (DomainListResponse, error) {
+func ListDomains(identityUrl, token string) (DomainListResponse, error) {
 	var result DomainListResponse
 
-	url := fmt.Sprintf("https://%s:5000/v3/domains", host)
-	apiResp, err := callGET(url, token)
+	apiResp, err := callGET(identityUrl, token)
 	if err != nil {
 		return result, fmt.Errorf("failed to list domains: %v", err)
 	}

@@ -1,19 +1,12 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 )
 
 // UpdateNetworkInstallRequest represents the metadata update request
 type UpdateNetworkInstallRequest struct {
 	Metadata map[string]string `json:"metadata"`
-}
-
-func (r UpdateNetworkInstallRequest) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Metadata map[string]string `json:"metadata"`
-	}{r.Metadata})
 }
 
 // UpdateNetworkInstall sets the network_install metadata for a VM

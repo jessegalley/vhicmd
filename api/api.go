@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -11,9 +12,9 @@ import (
 )
 
 // payload defines the interface for all API payloads, ensuring they can be marshaled to JSON.
-type Payload interface {
-	MarshalJSON() ([]byte, error)
-}
+//type Payload interface {
+//	MarshalJSON() ([]byte, error)
+//}
 
 // ApiResponse represents the response from an API call
 type ApiResponse struct {
@@ -75,12 +76,13 @@ type ApiResponse struct {
 //}
 
 // callPOST is a helper for POST requests. If you need to pass a token, supply it via the `token` parameter.
-func callPOST(url, token string, payload Payload) (ApiResponse, error) {
+func callPOST(url, token string, body interface{}) (ApiResponse, error) {
 	apiResp := ApiResponse{}
 
-	jsonData, err := payload.MarshalJSON()
+	// Marshal the request struct (whatever type it is) into JSON.
+	jsonData, err := json.Marshal(body)
 	if err != nil {
-		return apiResp, fmt.Errorf("error marshalling json payload: %v", err)
+		return apiResp, fmt.Errorf("error marshaling JSON payload: %v", err)
 	}
 
 	resp, err := httpclient.SendRequestWithToken("POST", url, token, bytes.NewBuffer(jsonData))
@@ -96,11 +98,11 @@ func callPOST(url, token string, payload Payload) (ApiResponse, error) {
 		apiResp.TokenHeader = token
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return apiResp, fmt.Errorf("error reading response body: %v", err)
 	}
-	apiResp.Response = string(body)
+	apiResp.Response = string(bodyBytes)
 
 	return apiResp, nil
 }
@@ -112,6 +114,27 @@ func callGET(url, token string) (ApiResponse, error) {
 	resp, err := httpclient.SendRequestWithToken("GET", url, token, nil)
 	if err != nil {
 		return apiResp, fmt.Errorf("error making HTTP GET request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	apiResp.ResponseCode = resp.StatusCode
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return apiResp, fmt.Errorf("error reading response body: %v", err)
+	}
+	apiResp.Response = string(body)
+
+	return apiResp, nil
+}
+
+// callDELETE is a helper for DELETE requests
+func callDELETE(url, token string) (ApiResponse, error) {
+	apiResp := ApiResponse{}
+
+	resp, err := httpclient.SendRequestWithToken("DELETE", url, token, nil)
+	if err != nil {
+		return apiResp, fmt.Errorf("error making HTTP DELETE request: %v", err)
 	}
 	defer resp.Body.Close()
 

@@ -18,11 +18,10 @@ type ProjectListResponse struct {
 }
 
 // ListProjects calls GET /v3/projects using the token for authentication.
-func ListProjects(host, token string) (ProjectListResponse, error) {
+func ListProjects(identityUrl, token string) (ProjectListResponse, error) {
 	var result ProjectListResponse
 
-	url := fmt.Sprintf("https://%s:5000/v3/projects", host)
-	apiResp, err := callGET(url, token)
+	apiResp, err := callGET(identityUrl, token)
 	if err != nil {
 		return result, fmt.Errorf("failed to list projects: %v", err)
 	}

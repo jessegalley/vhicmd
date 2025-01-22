@@ -30,6 +30,7 @@ var (
 	computeURL string
 	cfgFile    string
 	vhiHost    string
+	tok        api.Token
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -70,7 +71,8 @@ func init() {
 		vhiHost = host
 
 		if authToken == "" {
-			tok, err := api.LoadTokenStruct(host)
+			var err error
+			tok, err = api.LoadTokenStruct(host)
 			if err != nil {
 				if err.Error() == "token for "+host+" is expired" {
 					return fmt.Errorf("the auth token for '%s' is expired; re-authenticate using 'vhicmd auth'", host)

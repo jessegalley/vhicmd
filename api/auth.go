@@ -23,14 +23,9 @@ type Token struct {
 	Endpoints map[string]string `json:"endpoints,omitempty"`
 }
 
+// AuthPayload is used for the authentication request body
 type AuthPayload struct {
 	Auth Auth `json:"auth"`
-}
-
-func (a AuthPayload) MarshalJSON() ([]byte, error) {
-	return json.MarshalIndent(struct {
-		Auth Auth `json:"auth"`
-	}{a.Auth}, " ", "  ")
 }
 
 type Auth struct {
@@ -67,8 +62,9 @@ type Project struct {
 	Domain Domain `json:"domain"`
 }
 
-func newAuthPayload(domain Domain, project string, user string, password string) AuthPayload {
-	payload := AuthPayload{
+// Builds the authentication payload
+func newAuthPayload(domain Domain, project, user, password string) AuthPayload {
+	return AuthPayload{
 		Auth: Auth{
 			Identity: Identity{
 				Methods: []string{"password"},
@@ -88,7 +84,6 @@ func newAuthPayload(domain Domain, project string, user string, password string)
 			},
 		},
 	}
-	return payload
 }
 
 type AuthResponse struct {
@@ -138,9 +133,7 @@ type AuthResponse struct {
 func SaveToken(host, token string, expiresAt time.Time, endpoints map[string]string) error {
 	store, err := loadTokenStore()
 	if err != nil {
-		store = TokenStore{
-			Tokens: make(map[string]Token),
-		}
+		store = TokenStore{Tokens: make(map[string]Token)}
 	}
 
 	store.Tokens[host] = Token{
@@ -205,14 +198,11 @@ func LoadToken(host string) (string, error) {
 	return t.Value, nil
 }
 
-// Authenticate() takes in the credentials and domain/project names, calls
-// the auth token API, and returns the resulting token on sucess.
-// Returns an error if the authentication or underlying api calls failed.
+// Authenticate uses domain/project names, calls the auth token API, and returns the token on success.
 func Authenticate(host, domain, project, username, password string) (string, error) {
 	// Attempt to load an existing token if it's valid
 	existingToken, err := LoadToken(host)
 	if err == nil {
-		// existing token is valid, so just reuse it
 		return existingToken, nil
 	}
 
@@ -223,6 +213,7 @@ func Authenticate(host, domain, project, username, password string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("authentication request failed: %v", err)
 	}
+
 	if apiResp.ResponseCode != 201 {
 		return "", fmt.Errorf("authentication failed: %v", apiResp.Response)
 	}
@@ -238,7 +229,7 @@ func Authenticate(host, domain, project, username, password string) (string, err
 	}
 	expiresAt := authResponse.Token.ExpiresAt
 
-	// Extract all "public" endpoints we care about into a map
+	// Extract "public" endpoints we care about
 	endpoints := make(map[string]string)
 	for _, svc := range authResponse.Token.Catalog {
 		for _, ep := range svc.Endpoints {
@@ -262,7 +253,6 @@ func AuthenticateById(host, domainID, project, username, password string) (strin
 	// Try existing token first
 	existingToken, err := LoadToken(host)
 	if err == nil {
-		// existing token is valid
 		return existingToken, nil
 	}
 
@@ -307,7 +297,7 @@ func AuthenticateById(host, domainID, project, username, password string) (strin
 	}
 	expiresAt := authResponse.Token.ExpiresAt
 
-	// Extract all "public" endpoints we care about
+	// Extract "public" endpoints
 	endpoints := make(map[string]string)
 	for _, svc := range authResponse.Token.Catalog {
 		for _, ep := range svc.Endpoints {
@@ -326,6 +316,7 @@ func AuthenticateById(host, domainID, project, username, password string) (strin
 	return apiResp.TokenHeader, nil
 }
 
+// Initialize TokenFile path on module load
 func init() {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
