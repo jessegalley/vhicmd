@@ -24,14 +24,9 @@ var setNetworkInstallCmd = &cobra.Command{
 			return fmt.Errorf("value must be 'true' or 'false'")
 		}
 
-		tok, err := api.LoadTokenStruct(vhiHost)
+		computeURL, err := validateTokenEndpoint(tok, "compute")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
-		}
-
-		computeURL := tok.Endpoints["compute"]
-		if computeURL == "" {
-			return fmt.Errorf("no 'compute' endpoint found in token; re-auth or check your catalog")
+			return err
 		}
 
 		enabled := value == "true"

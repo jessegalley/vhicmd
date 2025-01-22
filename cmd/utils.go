@@ -8,6 +8,7 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/jessegalley/vhicmd/api"
 	"golang.org/x/term"
 )
 
@@ -118,4 +119,14 @@ func stringOrNone(s string) string {
 		return "none"
 	}
 	return s
+}
+
+// validateTokenEndpoint() checks if the given token has an endpoint
+// for the given service and returns the URL if it does
+func validateTokenEndpoint(tok api.Token, endpoint string) (string, error) {
+	url, exists := tok.Endpoints[endpoint]
+	if !exists || url == "" {
+		return "", fmt.Errorf("no '%s' endpoint found in token; re-auth or check your catalog", endpoint)
+	}
+	return url, nil
 }

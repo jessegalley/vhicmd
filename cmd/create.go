@@ -21,102 +21,129 @@ var createVMCmd = &cobra.Command{
 	Use:   "vm",
 	Short: "Create a new virtual machine",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		host := viper.GetString("host")
-		tok, err := api.LoadTokenStruct(host)
+		computeURL, err := validateTokenEndpoint(tok, "compute")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
+			return err
 		}
 
-		computeURL := tok.Endpoints["compute"]
-		if computeURL == "" {
-			return fmt.Errorf("no 'compute' endpoint found in token; re-auth or check your catalog")
+		storageURL, err := validateTokenEndpoint(tok, "volumev3")
+		if err != nil {
+			return err
 		}
 
-		// Use flag value if set, otherwise fall back to viper config
+		// Get required parameters
 		flavorRef := flagFlavorRef
 		if flavorRef == "" {
 			flavorRef = viper.GetString("flavor_id")
 		}
-
-		// Get flavor details
-		flavorDetails, err := api.GetFlavorDetails(computeURL, tok.Value, flavorRef)
-		if err != nil {
-			return fmt.Errorf("failed to fetch flavor details: %v", err)
+		if flavorRef == "" {
+			return fmt.Errorf("no flavor specified; provide --flavor flag or set 'flavor_id' in config")
 		}
 
-		// Create the VM request
+		// If netboot is enabled, clear the imageRef
+		// Otherwise, use the provided imageRef
+		if flagVMNetboot {
+			flagImageRef = ""
+		}
+
+		imageRef := flagImageRef
+		networks := flagNetworkCSV
+		if networks == "" {
+			networks = viper.GetString("networks")
+		}
+		if networks == "" {
+			return fmt.Errorf("no networks specified; provide --networks flag or set 'networks' in config")
+		}
+
+		// Create network mapping
+		networkIDs := strings.Split(networks, ",")
+		var networkMapping []map[string]string
+		for _, networkID := range networkIDs {
+			networkMapping = append(networkMapping, map[string]string{
+				"uuid": strings.TrimSpace(networkID),
+			})
+		}
+
+		// Calculate volume size
+		volumeSize := 10 // Default minimum
+		if flagVMSize > 0 {
+			volumeSize = flagVMSize
+		}
+
+		// Create initial VM request
 		var request api.CreateVMRequest
 		request.Server.Name = flagVMName
 		request.Server.FlavorRef = flavorRef
-		request.Server.Metadata = map[string]string{
-			"network_install": "true",
-		}
+		request.Server.Networks = networkMapping
 
-		// Use flag value if set, otherwise fall back to viper config
-		imageRef := flagImageRef
+		// Set metadata for network boot if no image is specified
 		if imageRef == "" {
-			imageRef = viper.GetString("image_id")
+			request.Server.Metadata = map[string]string{
+				"network_install": "true",
+			}
 		}
 
-		// Handle disk setup based on flavor
-		if flavorDetails.Flavor.Disk == 0 {
+		// Determine block device mapping
+		if imageRef != "" {
 			request.Server.BlockDeviceMappingV2 = []map[string]interface{}{
 				{
 					"boot_index":            "0",
 					"uuid":                  imageRef,
 					"source_type":           "image",
 					"destination_type":      "volume",
-					"volume_size":           10,
-					"delete_on_termination": true,
+					"volume_size":           volumeSize,
+					"delete_on_termination": false,
 					"volume_type":           "nvme_ec7_2",
 				},
 			}
 		} else {
-			request.Server.ImageRef = imageRef
+			// Create blank volume if no image is specified
+			fmt.Printf("Creating blank boot volume for VM %s...\n", flagVMName)
+			volRequest := api.CreateVolumeRequest{}
+			volRequest.Volume.Name = fmt.Sprintf("%s-boot", flagVMName)
+			volRequest.Volume.Size = volumeSize
+			volRequest.Volume.Description = "Boot volume for " + flagVMName
+			volRequest.Volume.VolumeType = "nvme_ec7_2"
+
+			volResp, err := api.CreateVolume(storageURL, tok.Value, volRequest)
+			if err != nil {
+				return fmt.Errorf("failed to create blank boot volume: %v", err)
+			}
+
+			fmt.Printf("Waiting for volume to become available...\n")
+			err = api.WaitForVolumeStatus(storageURL, tok.Value, volResp.Volume.ID, "available")
+			if err != nil {
+				return fmt.Errorf("failed waiting for volume: %v", err)
+			}
+
+			// Set bootable flag
+			err = api.SetVolumeBootable(storageURL, tok.Value, volResp.Volume.ID, true)
+			if err != nil {
+				return fmt.Errorf("failed to set bootable flag: %v", err)
+			}
+
+			request.Server.BlockDeviceMappingV2 = []map[string]interface{}{
+				{
+					"boot_index":            "0",
+					"uuid":                  volResp.Volume.ID,
+					"source_type":           "volume",
+					"destination_type":      "volume",
+					"delete_on_termination": true,
+				},
+			}
 		}
 
-		// Use flag value if set, otherwise fall back to viper config
-		networks := flagNetworkCSV
-		if networks == "" {
-			networks = viper.GetString("networks")
-		}
-		if networks == "" {
-			return fmt.Errorf("no networks specified; provide via --networks flag or config")
-		}
-
-		networkIDs := strings.Split(networks, ",")
-		for _, networkID := range networkIDs {
-			request.Server.Networks = append(request.Server.Networks, map[string]string{
-				"uuid": strings.TrimSpace(networkID),
-			})
-		}
-
-		// Create VM
+		// Create the VM
+		fmt.Printf("Creating VM %s...\n", flagVMName)
 		resp, err := api.CreateVM(computeURL, tok.Value, request)
 		if err != nil {
 			return fmt.Errorf("failed to create VM: %v", err)
 		}
 
-		fmt.Printf("Creating VM %s (%s)\n", flagVMName, resp.Server.ID)
-
 		// Wait for VM to become active
-		vmDetails, err := api.WaitForActive(computeURL, tok.Value, resp.Server.ID)
+		vmDetails, err := api.WaitForStatus(computeURL, tok.Value, resp.Server.ID, "ACTIVE")
 		if err != nil {
 			return err
-		}
-
-		// Stop the VM if power-on is false
-		if !flagPowerOn {
-			fmt.Printf("VM created, setting netboot and stopping VM... almost done\n\n")
-			err = api.StopVM(computeURL, tok.Value, resp.Server.ID)
-			if err != nil {
-				return fmt.Errorf("failed to stop VM: %v", err)
-			}
-			// Get final state
-			vmDetails, err = api.GetVMDetails(computeURL, tok.Value, resp.Server.ID)
-			if err != nil {
-				return fmt.Errorf("failed to get final VM state: %v", err)
-			}
 		}
 
 		// Prepare output details
@@ -143,7 +170,6 @@ var createVMCmd = &cobra.Command{
 			details["networks"] = netInfo
 		}
 
-		// Output results
 		if flagJsonOutput {
 			jsonBytes, err := json.MarshalIndent(details, "", "  ")
 			if err != nil {
@@ -158,6 +184,12 @@ var createVMCmd = &cobra.Command{
 			fmt.Println(string(yamlBytes))
 		}
 
+		// finally, if netboot flag is set, print the command required
+		// to hard reboot the VM
+		if flagVMNetboot {
+			fmt.Printf("\nTo netboot the VM after setting up Cobbler, run:\n\nvhicmd reboot hard %s\n\n", vmDetails.ID)
+		}
+
 		return nil
 	},
 }
@@ -167,14 +199,9 @@ var createVolumeCmd = &cobra.Command{
 	Use:   "volume",
 	Short: "Create a new storage volume",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tok, err := api.LoadTokenStruct(vhiHost)
+		storageURL, err := validateTokenEndpoint(tok, "volumev3")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
-		}
-
-		storageURL := tok.Endpoints["volumev3"]
-		if storageURL == "" {
-			return fmt.Errorf("no 'volumev3' endpoint found in token; re-auth or check your catalog")
+			return err
 		}
 
 		var request api.CreateVolumeRequest
@@ -202,7 +229,8 @@ var (
 	flagVolumeSize        int
 	flagVolumeDescription string
 	flagVolumeType        string
-	flagPowerOn           bool
+	flagVMSize            int
+	flagVMNetboot         bool
 )
 
 func init() {
@@ -212,7 +240,8 @@ func init() {
 	createVMCmd.Flags().StringVar(&flagImageRef, "image", "", "Image ID for the virtual machine")
 	createVMCmd.Flags().StringVar(&flagNetworkCSV, "networks", "", "Comma-separated list of network UUIDs")
 	createVMCmd.Flags().BoolVar(&flagJsonOutput, "json", false, "Output in JSON format (default: YAML)")
-	createVMCmd.Flags().BoolVar(&flagPowerOn, "power-on", false, "Power on the VM after creation (default: true)")
+	createVMCmd.Flags().IntVar(&flagVMSize, "size", 0, "Size in GB of boot volume")
+	createVMCmd.Flags().BoolVar(&flagVMNetboot, "netboot", true, "Enable network boot with blank volume")
 
 	// Bind flags to viper
 	viper.BindPFlag("flavor_id", createVMCmd.Flags().Lookup("flavor"))

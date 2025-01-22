@@ -60,7 +60,7 @@ func SendRequestWithToken(method, url, token string, body io.Reader) (*http.Resp
 	}
 
 	// We need this header set for BlockDeviceMappingV2.VolumeType
-	req.Header.Set("X-OpenStack-Nova-API-Version", "2.67")
+	req.Header.Set("X-OpenStack-Nova-API-Version", "2.72")
 
 	// Log the complete request
 	//fmt.Printf("\nRequest:\n")

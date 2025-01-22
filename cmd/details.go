@@ -21,14 +21,9 @@ var vmDetailsCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vmID := args[0]
 
-		tok, err := api.LoadTokenStruct(vhiHost)
+		computeURL, err := validateTokenEndpoint(tok, "compute")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
-		}
-
-		computeURL := tok.Endpoints["compute"]
-		if computeURL == "" {
-			return fmt.Errorf("no 'compute' endpoint found in token; re-auth or check your catalog")
+			return err
 		}
 
 		vm, err := api.GetVMDetails(computeURL, tok.Value, vmID)

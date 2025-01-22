@@ -19,10 +19,6 @@ var catalogCmd = &cobra.Command{
 	Short: "Fetch and display the OpenStack service catalog",
 	Long:  "Fetches the service catalog from the OpenStack Identity API and displays the available services and their endpoints.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if authToken == "" {
-			return fmt.Errorf("no auth token found; run 'vhicmd auth' first")
-		}
-
 		resp, err := api.GetCatalog(vhiHost, authToken)
 		if err != nil {
 			return err

@@ -79,6 +79,16 @@ Tokens are saved to `~/.vhicmd.token` and can be refreshed with `vhicmd auth`.
 After authentication, you can start using the tool.
 Note that UUIDs are used to identify resources (VMs, volumes, networks, flavors, images).
 
+Show catalog:
+```bash
+vhicmd catalog
+```
+
+Reboot VM:
+```bash
+vhicmd reboot <vm-id> <soft/hard>
+```
+
 List resources:
 ```bash
 vhicmd list vms
@@ -97,10 +107,21 @@ Create resources:
 ```bash
 # Create VM
 # * Note: networks is a comma-separated list of UUIDs
-vhicmd create vm --name test-vm --flavor <flavor-id> --image <image-id> --networks <network-ids>
+vhicmd create vm --name test-vm --flavor <flavor-id> --image <image-id> --networks <network-ids> --netboot <true/false> --volume <volume-id> --size <size-in-GB>
+
+# Create VM with netboot enabled, this will create a blank volume instead of using an image
+vhicmd create vm --name test-vm --flavor <flavor-id> --networks <network-ids> --netboot true --size <size-in-GB>
+
+# Create VM with config values from `~/.vhirc`
+vhicmd create vm --name test-vm --size <size-in-GB>
 
 # Create Volume
 vhicmd create volume --name test-vol --size 10
+```
+
+Make volume bootable:
+```bash
+vhicmd bootable <volume-id> true/false
 ```
 
 After creating a VM, `vhicmd` will print the VM ID, IP/MAC addresses, and other relevant information.
@@ -116,3 +137,48 @@ vhicmd netboot set <vm-id> true/false
 - `--json`: Output in JSON format instead of tables
 
 This is in lieu of using a configuration file.
+
+## Using Cobbler to netboot install instances
+```bash
+# Create a VM with netboot enabled
+vhicmd create vm --name test-vm --flavor <flavor-id> --networks <network-ids> --netboot true --size <size-in-GB>
+```
+
+Sample output:
+
+```bash
+./vhicmd create vm --name testvm01
+Creating blank boot volume for VM testvm01...
+Waiting for volume to become available...
+Creating VM testvm01...
+id: abc12345-6789-0abc-def1-234567890abc
+metadata:
+  network_install: "true"
+name: testvm01
+networks:
+- ip_address: 192.168.1.10
+  mac_address: aa:bb:cc:dd:ee:ff
+  name: Internal_Network
+- ip_address: 192.168.2.20
+  mac_address: ff:ee:dd:cc:bb:aa
+  name: Storage_Network
+power_state: RUNNING
+
+To netboot the VM after setting up Cobbler, run:
+
+vhicmd reboot hard abc12345-6789-0abc-def1-234567890abc
+```
+
+Using the networks field, add the IP and MAC addresses to the Cobbler settings for the VM, then perform a hard reboot to netboot the VM.
+
+```bash
+vhicmd reboot hard abc12345-6789-0abc-def1-234567890abc
+```
+
+This will netboot the VM and start the installation process. To turn off netboot, run:
+
+```bash
+vhicmd netboot set abc12345-6789-0abc-def1-234567890abc false
+```
+
+Proceed as usual to deploy the VM to production.

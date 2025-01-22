@@ -22,11 +22,6 @@ var listDomainsCmd = &cobra.Command{
 	Use:   "domains",
 	Short: "List domains [Req: admin]",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tok, err := api.LoadTokenStruct(vhiHost)
-		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
-		}
-
 		// Call the API
 		resp, err := api.ListDomains(vhiHost, tok.Value)
 		if err != nil {
@@ -61,12 +56,12 @@ var listProjectsCmd = &cobra.Command{
 	Use:   "projects",
 	Short: "List projects",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tok, err := api.LoadTokenStruct(vhiHost)
+		identityUrl, err := validateTokenEndpoint(tok, "identity")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
+			return err
 		}
 
-		resp, err := api.ListProjects(vhiHost, tok.Value)
+		resp, err := api.ListProjects(identityUrl, tok.Value)
 		if err != nil {
 			return err
 		}
@@ -95,14 +90,9 @@ var listFlavorsCmd = &cobra.Command{
 	Use:   "flavors",
 	Short: "List flavors",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tok, err := api.LoadTokenStruct(vhiHost)
+		computeURL, err := validateTokenEndpoint(tok, "compute")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
-		}
-
-		computeURL := tok.Endpoints["compute"]
-		if computeURL == "" {
-			return fmt.Errorf("no 'compute' endpoint found in token; re-auth or check your catalog")
+			return err
 		}
 
 		// Gather optional query parameters
@@ -162,20 +152,12 @@ var listImagesCmd = &cobra.Command{
 	Use:   "images",
 	Short: "List virtual machine images",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tok, err := api.LoadTokenStruct(vhiHost)
+		imageURL, err := validateTokenEndpoint(tok, "image")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
-		}
-
-		imageURL := tok.Endpoints["image"]
-		if imageURL == "" {
-			return fmt.Errorf("no 'image' endpoint found in token; re-auth or check your catalog")
+			return err
 		}
 
 		queryParams := make(map[string]string)
-		if name, _ := cmd.Flags().GetString("name"); name != "" {
-			queryParams["name"] = name
-		}
 		if visibility, _ := cmd.Flags().GetString("visibility"); visibility != "" {
 			queryParams["visibility"] = visibility
 		}
@@ -194,24 +176,32 @@ var listImagesCmd = &cobra.Command{
 			return err
 		}
 
+		nameFilter, _ := cmd.Flags().GetString("name")
+
+		var imgList []responseparser.Image
+		for _, i := range resp.Images {
+			if nameFilter == "" || strings.Contains(
+				strings.ToLower(i.Name),
+				strings.ToLower(nameFilter),
+			) {
+				imgList = append(imgList, responseparser.Image{
+					ID:      i.ID,
+					Name:    i.Name,
+					Status:  i.Status,
+					Size:    i.Size,
+					Owner:   i.Owner,
+					MinDisk: i.MinDisk,
+					MinRAM:  i.MinRAM,
+				})
+			}
+		}
+
 		if flagJsonOutput {
-			b, _ := json.MarshalIndent(resp.Images, "", "  ")
+			b, _ := json.MarshalIndent(imgList, "", "  ")
 			fmt.Println(string(b))
 			return nil
 		}
 
-		var imgList []responseparser.Image
-		for _, i := range resp.Images {
-			imgList = append(imgList, responseparser.Image{
-				ID:      i.ID,
-				Name:    i.Name,
-				Status:  i.Status,
-				Size:    i.Size,
-				Owner:   i.Owner,
-				MinDisk: i.MinDisk,
-				MinRAM:  i.MinRAM,
-			})
-		}
 		responseparser.PrintImagesTable(imgList)
 		return nil
 	},
@@ -221,14 +211,9 @@ var listNetworksCmd = &cobra.Command{
 	Use:   "networks",
 	Short: "List virtual networks",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tok, err := api.LoadTokenStruct(vhiHost)
+		networkURL, err := validateTokenEndpoint(tok, "network")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
-		}
-
-		networkURL := tok.Endpoints["network"]
-		if networkURL == "" {
-			return fmt.Errorf("no 'network' endpoint found in token; re-auth or check your catalog")
+			return err
 		}
 
 		queryParams := make(map[string]string)
@@ -278,20 +263,12 @@ var listVmCmd = &cobra.Command{
 	Short: "List virtual machines",
 	Long:  "Fetches and displays a list of virtual machines in the project (determined by auth).",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tok, err := api.LoadTokenStruct(vhiHost)
+		computeURL, err := validateTokenEndpoint(tok, "compute")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
-		}
-
-		computeURL := tok.Endpoints["compute"]
-		if computeURL == "" {
-			return fmt.Errorf("no 'compute' endpoint found in token; re-auth or check your catalog")
+			return err
 		}
 
 		queryParams := make(map[string]string)
-		if name, _ := cmd.Flags().GetString("name"); name != "" {
-			queryParams["name"] = name
-		}
 		if limit, _ := cmd.Flags().GetInt("limit"); limit > 0 {
 			queryParams["limit"] = fmt.Sprintf("%d", limit)
 		}
@@ -304,19 +281,26 @@ var listVmCmd = &cobra.Command{
 			return err
 		}
 
+		nameFilter, _ := cmd.Flags().GetString("name")
+		var vmList []responseparser.VM
+		for _, v := range resp.Servers {
+			if nameFilter == "" || strings.Contains(
+				strings.ToLower(v.Name),
+				strings.ToLower(nameFilter),
+			) {
+				vmList = append(vmList, responseparser.VM{
+					ID:   v.ID,
+					Name: v.Name,
+				})
+			}
+		}
+
 		if flagJsonOutput {
-			b, _ := json.MarshalIndent(resp.Servers, "", "  ")
+			b, _ := json.MarshalIndent(vmList, "", "  ")
 			fmt.Println(string(b))
 			return nil
 		}
 
-		var vmList []responseparser.VM
-		for _, v := range resp.Servers {
-			vmList = append(vmList, responseparser.VM{
-				ID:   v.ID,
-				Name: v.Name,
-			})
-		}
 		responseparser.PrintVMsTable(vmList)
 		return nil
 	},
@@ -326,14 +310,9 @@ var listVolumesCmd = &cobra.Command{
 	Use:   "volumes",
 	Short: "List storage volumes",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tok, err := api.LoadTokenStruct(vhiHost)
+		storageURL, err := validateTokenEndpoint(tok, "volumev3")
 		if err != nil {
-			return fmt.Errorf("no valid auth token found; run 'vhicmd auth' first: %v", err)
-		}
-
-		storageURL := tok.Endpoints["volumev3"]
-		if storageURL == "" {
-			return fmt.Errorf("no 'volumev3' endpoint found in token; re-auth or check your catalog")
+			return err
 		}
 
 		queryParams := make(map[string]string)
@@ -363,6 +342,8 @@ var listVolumesCmd = &cobra.Command{
 }
 
 func init() {
+	listCmd.PersistentFlags().BoolVar(&flagJsonOutput, "json", false, "Output in JSON format")
+
 	listImagesCmd.Flags().String("name", "", "Filter by image name")
 	listImagesCmd.Flags().String("visibility", "", "Filter by visibility (public, private, etc.)")
 	listImagesCmd.Flags().String("status", "", "Filter by image status")
@@ -397,6 +378,5 @@ func init() {
 	listCmd.AddCommand(listVmCmd)
 	listCmd.AddCommand(listImagesCmd)
 	listCmd.AddCommand(listVolumesCmd)
-	listCmd.PersistentFlags().BoolVar(&flagJsonOutput, "json", false, "Output in JSON format")
 	rootCmd.AddCommand(listCmd)
 }
