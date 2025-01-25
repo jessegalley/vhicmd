@@ -31,6 +31,11 @@ var createVMCmd = &cobra.Command{
 			return err
 		}
 
+		imageRef := flagImageRef
+		if imageRef == "" {
+			imageRef = viper.GetString("image_id")
+		}
+
 		// Get required parameters
 		flavorRef := flagFlavorRef
 		if flavorRef == "" {
@@ -40,13 +45,7 @@ var createVMCmd = &cobra.Command{
 			return fmt.Errorf("no flavor specified; provide --flavor flag or set 'flavor_id' in config")
 		}
 
-		// If netboot is enabled, clear the imageRef
-		// Otherwise, use the provided imageRef
-		if flagVMNetboot {
-			flagImageRef = ""
-		}
-
-		imageRef := flagImageRef
+		// Ensure networks are specified
 		networks := flagNetworkCSV
 		if networks == "" {
 			networks = viper.GetString("networks")
@@ -55,12 +54,32 @@ var createVMCmd = &cobra.Command{
 			return fmt.Errorf("no networks specified; provide --networks flag or set 'networks' in config")
 		}
 
-		// Create network mapping
+		// Ensure IPs are specified
+		ips := flagIPCSV
+		if ips == "" {
+			return fmt.Errorf("no IPs specified; provide --ips flag")
+		}
+
+		// Split networks and IPs into slices
 		networkIDs := strings.Split(networks, ",")
+		ipAddresses := strings.Split(ips, ",")
+
+		// Validate that the number of networks matches the number of IPs
+		if len(networkIDs) != len(ipAddresses) {
+			return fmt.Errorf("the number of networks (%d) must match the number of IPs (%d)", len(networkIDs), len(ipAddresses))
+		}
+
+		// Create network mapping with IPs
 		var networkMapping []map[string]string
-		for _, networkID := range networkIDs {
+		for i, networkID := range networkIDs {
+			ip := strings.TrimSpace(ipAddresses[i])
+			if ip == "" {
+				return fmt.Errorf("IP address for network %s cannot be empty", networkID)
+			}
+
 			networkMapping = append(networkMapping, map[string]string{
-				"uuid": strings.TrimSpace(networkID),
+				"uuid":     strings.TrimSpace(networkID),
+				"fixed_ip": ip,
 			})
 		}
 
@@ -77,7 +96,11 @@ var createVMCmd = &cobra.Command{
 		request.Server.Networks = networkMapping
 
 		// Set metadata for network boot if no image is specified
-		if imageRef == "" {
+		// netboot is deprecated, use --image flag instead
+		// the reason is that VHI does not have good support for netboot,
+		// and a custom iPXE rom is required to boot from network
+		if flagVMNetboot {
+			imageRef = "" // Clear image ref if netboot is enabled
 			request.Server.Metadata = map[string]string{
 				"network_install": "true",
 			}
@@ -85,6 +108,7 @@ var createVMCmd = &cobra.Command{
 
 		// Determine block device mapping
 		if imageRef != "" {
+			// imageRef exists, create boot volume from image
 			request.Server.BlockDeviceMappingV2 = []map[string]interface{}{
 				{
 					"boot_index":            "0",
@@ -92,11 +116,13 @@ var createVMCmd = &cobra.Command{
 					"source_type":           "image",
 					"destination_type":      "volume",
 					"volume_size":           volumeSize,
-					"delete_on_termination": false,
+					"delete_on_termination": true,
 					"volume_type":           "nvme_ec7_2",
+					"disk_bus":              "sata",
 				},
 			}
-			// Handle user data if provided
+			// cloud-init script
+			// VHI calls this user_data, just b64 encoded cloud-init script
 			if flagUserData != "" {
 				userData, err := readAndEncodeUserData(flagUserData)
 				if err != nil {
@@ -106,6 +132,8 @@ var createVMCmd = &cobra.Command{
 			}
 		} else {
 			// Create blank volume if no image is specified
+			// we get here if --netboot is flagged or --image is not provided
+			// and there is no image in the Vyper config
 			fmt.Printf("Creating blank boot volume for VM %s...\n", flagVMName)
 			volRequest := api.CreateVolumeRequest{}
 			volRequest.Volume.Name = fmt.Sprintf("%s-boot", flagVMName)
@@ -143,6 +171,11 @@ var createVMCmd = &cobra.Command{
 
 		// Create the VM
 		fmt.Printf("Creating VM %s...\n", flagVMName)
+		//fmt.Printf("Full req, URL: %s, Request: %s\n", computeURL,
+		//	func() string {
+		//		j, _ := json.Marshal(request)
+		//		return string(j)
+		//	}())
 		resp, err := api.CreateVM(computeURL, tok.Value, request)
 		if err != nil {
 			return fmt.Errorf("failed to create VM: %v", err)
@@ -168,7 +201,7 @@ var createVMCmd = &cobra.Command{
 			if len(addrs) > 0 {
 				net := map[string]interface{}{
 					"name":        netName,
-					"mac_address": addrs[0].OSEXTIPSMACAddr,
+					"mac_address": strings.ToUpper(addrs[0].OSEXTIPSMACAddr),
 					"ip_address":  addrs[0].Addr,
 				}
 				netInfo = append(netInfo, net)
@@ -192,10 +225,11 @@ var createVMCmd = &cobra.Command{
 			fmt.Println(string(yamlBytes))
 		}
 
-		// finally, if netboot flag is set, print the command required
-		// to hard reboot the VM
+		// Print netboot command if enabled
 		if flagVMNetboot {
-			fmt.Printf("\nTo netboot the VM after setting up Cobbler, run:\n\nvhicmd reboot hard %s\n\n", vmDetails.ID)
+			consoleURL := fmt.Sprintf("%s:8800/computer/instances/%s", tok.Host, vmDetails.ID)
+			fmt.Printf("\nGo to VHI console to complete machine bootup and installation.")
+			fmt.Printf("\nVHI console: %s\n", consoleURL)
 		}
 
 		return nil
@@ -233,6 +267,7 @@ var (
 	flagFlavorRef         string
 	flagImageRef          string
 	flagNetworkCSV        string
+	flagIPCSV             string
 	flagVolumeName        string
 	flagVolumeSize        int
 	flagVolumeDescription string
@@ -248,9 +283,10 @@ func init() {
 	createVMCmd.Flags().StringVar(&flagFlavorRef, "flavor", "", "Flavor ID for the virtual machine")
 	createVMCmd.Flags().StringVar(&flagImageRef, "image", "", "Image ID for the virtual machine")
 	createVMCmd.Flags().StringVar(&flagNetworkCSV, "networks", "", "Comma-separated list of network UUIDs")
+	createVMCmd.Flags().StringVar(&flagIPCSV, "ips", "", "Comma-separated list of IP addresses")
 	createVMCmd.Flags().BoolVar(&flagJsonOutput, "json", false, "Output in JSON format (default: YAML)")
 	createVMCmd.Flags().IntVar(&flagVMSize, "size", 0, "Size in GB of boot volume")
-	createVMCmd.Flags().BoolVar(&flagVMNetboot, "netboot", true, "Enable network boot with blank volume")
+	createVMCmd.Flags().BoolVar(&flagVMNetboot, "netboot", false, "Enable network boot with blank volume (deprecated, use --image)")
 	createVMCmd.Flags().StringVar(&flagUserData, "user-data", "", "User data for cloud-init (file path)")
 
 	// Bind flags to viper

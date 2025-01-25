@@ -397,3 +397,17 @@ func WaitForStatus(computeURL, token, vmID string, targetStatus string) (VMDetai
 	}
 	return VMDetail{}, fmt.Errorf("timeout waiting for VM to reach status %q", targetStatus)
 }
+
+// DeleteVM sends a request to delete a VM.
+func DeleteVM(computeURL, token, vmID string) error {
+	url := fmt.Sprintf("%s/servers/%s", computeURL, vmID)
+
+	resp, err := callDELETE(url, token)
+	if err != nil {
+		return fmt.Errorf("failed to delete VM: %v", err)
+	}
+	if resp.ResponseCode != 204 {
+		return fmt.Errorf("failed to delete VM [%d]: %s", resp.ResponseCode, resp.Response)
+	}
+	return nil
+}

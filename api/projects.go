@@ -21,7 +21,7 @@ type ProjectListResponse struct {
 func ListProjects(identityUrl, token string) (ProjectListResponse, error) {
 	var result ProjectListResponse
 
-	apiResp, err := callGET(identityUrl, token)
+	apiResp, err := callGET(fmt.Sprintf("%s/projects", identityUrl), token)
 	if err != nil {
 		return result, fmt.Errorf("failed to list projects: %v", err)
 	}

@@ -29,7 +29,7 @@ var hardRebootCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Hard reboot initiated for VM %s\nIf using Cobbler after creating a new VM, the VM should now be installing.\n", vmID)
+		fmt.Printf("Hard reboot initiated for VM %s\n", vmID)
 		return nil
 	},
 }

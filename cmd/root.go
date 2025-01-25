@@ -54,11 +54,6 @@ func init() {
 	rootCmd.PersistentFlags().StringP("host", "H", "", "VHI host to connect to")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vhirc)")
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		// If this is the "auth" command, skip the token loading
-		if cmd.Name() == "auth" || (cmd.Parent() != nil && cmd.Parent().Name() == "config") {
-			return nil
-		}
-
 		hostFlag, _ := cmd.Flags().GetString("host")
 		host := hostFlag
 		if host == "" {
@@ -66,6 +61,11 @@ func init() {
 		}
 		if host == "" {
 			return fmt.Errorf("no host found in flags or config. Provide --host or set 'host' in .vhirc")
+		}
+
+		// If this is the "auth" command, skip the token loading
+		if cmd.Name() == "auth" || (cmd.Parent() != nil && cmd.Parent().Name() == "config") {
+			return nil
 		}
 
 		vhiHost = host
