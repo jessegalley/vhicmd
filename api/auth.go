@@ -21,6 +21,7 @@ type Token struct {
 	ExpiresAt time.Time         `json:"expires_at"`
 	Host      string            `json:"host"`
 	Endpoints map[string]string `json:"endpoints,omitempty"`
+	Project   string            `json:"project,omitempty"`
 }
 
 // AuthPayload is used for the authentication request body
@@ -130,7 +131,7 @@ type AuthResponse struct {
 }
 
 // SaveToken saves or updates a token in the token store
-func SaveToken(host, token string, expiresAt time.Time, endpoints map[string]string) error {
+func SaveToken(host, project string, token string, expiresAt time.Time, endpoints map[string]string) error {
 	store, err := loadTokenStore()
 	if err != nil {
 		store = TokenStore{Tokens: make(map[string]Token)}
@@ -141,6 +142,7 @@ func SaveToken(host, token string, expiresAt time.Time, endpoints map[string]str
 		ExpiresAt: expiresAt,
 		Host:      host,
 		Endpoints: endpoints,
+		Project:   project,
 	}
 
 	data, err := json.MarshalIndent(store, "", "  ")
@@ -190,23 +192,16 @@ func loadTokenStore() (TokenStore, error) {
 	return store, nil
 }
 
-func LoadToken(host string) (string, error) {
-	t, err := LoadTokenStruct(host)
-	if err != nil {
-		return "", err
-	}
-	return t.Value, nil
-}
-
 // Authenticate uses domain/project names, calls the auth token API, and returns the token on success.
 func Authenticate(host, domain, project, username, password string) (string, error) {
 	// Attempt to load an existing token if it's valid
-	existingToken, err := LoadToken(host)
-	if err == nil {
-		return existingToken, nil
+	existingToken, err := LoadTokenStruct(host)
+	if err == nil && project == existingToken.Project {
+		fmt.Printf("Using existing token for %s, project %s\n", host, project)
+		return existingToken.Value, nil
 	}
 
-	// Not found or expired -> do a fresh authentication
+	// Not found, expired, or user wants a different project -> do a fresh authentication
 	url := fmt.Sprintf("https://%s:5000/v3/auth/tokens", host)
 	payload := newAuthPayload(Domain{Name: domain}, project, username, password)
 	apiResp, err := callPOST(url, "", payload)
@@ -229,7 +224,7 @@ func Authenticate(host, domain, project, username, password string) (string, err
 	}
 	expiresAt := authResponse.Token.ExpiresAt
 
-	// Extract "public" endpoints we care about
+	// Extract "public" endpoints we care about from the catalog
 	endpoints := make(map[string]string)
 	for _, svc := range authResponse.Token.Catalog {
 		for _, ep := range svc.Endpoints {
@@ -240,7 +235,7 @@ func Authenticate(host, domain, project, username, password string) (string, err
 	}
 
 	// Save token + endpoints
-	err = SaveToken(host, apiResp.TokenHeader, expiresAt, endpoints)
+	err = SaveToken(host, project, apiResp.TokenHeader, expiresAt, endpoints)
 	if err != nil {
 		return "", fmt.Errorf("failed to save token: %v", err)
 	}
@@ -249,11 +244,13 @@ func Authenticate(host, domain, project, username, password string) (string, err
 }
 
 // AuthenticateById uses domain ID instead of name
+// Broken currently, need to fix - project ID not getting parsed
+// TODO: Fix this
 func AuthenticateById(host, domainID, project, username, password string) (string, error) {
 	// Try existing token first
-	existingToken, err := LoadToken(host)
+	existingToken, err := LoadTokenStruct(host)
 	if err == nil {
-		return existingToken, nil
+		return existingToken.Project, nil
 	}
 
 	url := fmt.Sprintf("https://%s:5000/v3/auth/tokens", host)
@@ -308,7 +305,7 @@ func AuthenticateById(host, domainID, project, username, password string) (strin
 	}
 
 	// Save
-	err = SaveToken(host, apiResp.TokenHeader, expiresAt, endpoints)
+	err = SaveToken(host, project, apiResp.TokenHeader, expiresAt, endpoints)
 	if err != nil {
 		return "", fmt.Errorf("failed to save token: %v", err)
 	}

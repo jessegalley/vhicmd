@@ -8,7 +8,7 @@ A command-line utility for interacting with VHI (Virtual Hosting Infrastructure)
 - Detailed resource information
 - VM creation
 - Volume creation
-- Network boot configuration (netboot enable)
+- Reboot VM (hard, soft)
 - TODO: Delete & update resources
 
 ## Build & Installation

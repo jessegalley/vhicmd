@@ -227,7 +227,7 @@ var createVMCmd = &cobra.Command{
 
 		// Print netboot command if enabled
 		if flagVMNetboot {
-			consoleURL := fmt.Sprintf("%s:8800/computer/instances/%s", tok.Host, vmDetails.ID)
+			consoleURL := fmt.Sprintf("%s:8800/compute/servers/instances/%s/console", tok.Host, vmDetails.ID)
 			fmt.Printf("\nGo to VHI console to complete machine bootup and installation.")
 			fmt.Printf("\nVHI console: %s\n", consoleURL)
 		}
