@@ -26,6 +26,36 @@ type NetworkListResponse struct {
 	Networks []Network `json:"networks"`
 }
 
+// AttachNetworkRequest represents the payload for attaching a network to a VM.
+type AttachNetworkRequest struct {
+	InterfaceAttachment struct {
+		NetID    string   `json:"net_id,omitempty"`
+		PortID   string   `json:"port_id,omitempty"`
+		FixedIPs []IPInfo `json:"fixed_ips,omitempty"`
+		Tag      string   `json:"tag,omitempty"`
+	} `json:"interfaceAttachment"`
+}
+
+// IPInfo represents the structure for specifying fixed IPs.
+type IPInfo struct {
+	IPAddress string `json:"ip_address"`
+}
+
+// AttachNetworkResponse represents the response after attaching a network to a VM.
+type AttachNetworkResponse struct {
+	InterfaceAttachment struct {
+		FixedIPs []struct {
+			IPAddress string `json:"ip_address"`
+			SubnetID  string `json:"subnet_id"`
+		} `json:"fixed_ips"`
+		MacAddr   string `json:"mac_addr"`
+		NetID     string `json:"net_id"`
+		PortID    string `json:"port_id"`
+		PortState string `json:"port_state"`
+		Tag       string `json:"tag,omitempty"`
+	} `json:"interfaceAttachment"`
+}
+
 // ListNetworks fetches the list of networks available to the project.
 func ListNetworks(baseURL, token string, queryParams map[string]string) (NetworkListResponse, error) {
 	var result NetworkListResponse
@@ -55,6 +85,45 @@ func ListNetworks(baseURL, token string, queryParams map[string]string) (Network
 	err = json.Unmarshal([]byte(apiResp.Response), &result)
 	if err != nil {
 		return result, fmt.Errorf("failed to parse networks response: %v", err)
+	}
+
+	return result, nil
+}
+
+// AttachNetworkToVM attaches a network interface to a VM with optional parameters.
+func AttachNetworkToVM(computeURL, token, vmID, networkID, portID, tag string, fixedIPs []string) (AttachNetworkResponse, error) {
+	var result AttachNetworkResponse
+
+	url := fmt.Sprintf("%s/servers/%s/os-interface", computeURL, vmID)
+
+	request := AttachNetworkRequest{}
+	if networkID != "" {
+		request.InterfaceAttachment.NetID = networkID
+	}
+	if portID != "" {
+		request.InterfaceAttachment.PortID = portID
+	}
+	if tag != "" {
+		request.InterfaceAttachment.Tag = tag
+	}
+	if len(fixedIPs) > 0 {
+		for _, ip := range fixedIPs {
+			request.InterfaceAttachment.FixedIPs = append(request.InterfaceAttachment.FixedIPs, IPInfo{IPAddress: ip})
+		}
+	}
+
+	apiResp, err := callPOST(url, token, request)
+	if err != nil {
+		return result, fmt.Errorf("failed to attach network: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return result, fmt.Errorf("attach network request failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &result)
+	if err != nil {
+		return result, fmt.Errorf("failed to parse attach network response: %v", err)
 	}
 
 	return result, nil

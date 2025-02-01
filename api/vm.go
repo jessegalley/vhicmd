@@ -10,10 +10,11 @@ import (
 // CreateVMRequest defines the payload structure for creating a VM.
 type CreateVMRequest struct {
 	Server struct {
-		Name                 string                   `json:"name"`
-		FlavorRef            string                   `json:"flavorRef"`
-		ImageRef             string                   `json:"imageRef,omitempty"`
-		Networks             []map[string]string      `json:"networks"`
+		Name      string `json:"name"`
+		FlavorRef string `json:"flavorRef"`
+		ImageRef  string `json:"imageRef,omitempty"`
+		//Networks             []map[string]string      `json:"networks"`
+		Networks             string                   `json:"networks"`
 		BlockDeviceMappingV2 []map[string]interface{} `json:"block_device_mapping_v2,omitempty"`
 		KeyName              string                   `json:"key_name,omitempty"`
 		AdminPass            string                   `json:"adminPass,omitempty"`

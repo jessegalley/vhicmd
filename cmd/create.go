@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jessegalley/vhicmd/api"
 	"github.com/spf13/cobra"
@@ -70,18 +71,18 @@ var createVMCmd = &cobra.Command{
 		}
 
 		// Create network mapping with IPs
-		var networkMapping []map[string]string
-		for i, networkID := range networkIDs {
-			ip := strings.TrimSpace(ipAddresses[i])
-			if ip == "" {
-				return fmt.Errorf("IP address for network %s cannot be empty", networkID)
-			}
+		//var networkMapping []map[string]string
+		//for i, networkID := range networkIDs {
+		//	ip := strings.TrimSpace(ipAddresses[i])
+		//	if ip == "" {
+		//		return fmt.Errorf("IP address for network %s cannot be empty", networkID)
+		//	}
 
-			networkMapping = append(networkMapping, map[string]string{
-				"uuid":     strings.TrimSpace(networkID),
-				"fixed_ip": ip,
-			})
-		}
+		//	networkMapping = append(networkMapping, map[string]string{
+		//		"uuid":     strings.TrimSpace(networkID),
+		//		"fixed_ip": ip,
+		//	})
+		//}
 
 		// Calculate volume size
 		volumeSize := 10 // Default minimum
@@ -93,7 +94,9 @@ var createVMCmd = &cobra.Command{
 		var request api.CreateVMRequest
 		request.Server.Name = flagVMName
 		request.Server.FlavorRef = flavorRef
-		request.Server.Networks = networkMapping
+		//request.Server.Networks = networkMapping
+		// Pass "none" to networks, so no interfaces are attached initially**
+		request.Server.Networks = "none"
 
 		// Set metadata for network boot if no image is specified
 		// netboot is deprecated, use --image flag instead
@@ -194,19 +197,57 @@ var createVMCmd = &cobra.Command{
 			"id":          vmDetails.ID,
 			"metadata":    vmDetails.Metadata,
 		}
-
 		// Add network info
 		netInfo := make([]map[string]interface{}, 0)
-		for netName, addrs := range vmDetails.Addresses {
-			if len(addrs) > 0 {
-				net := map[string]interface{}{
-					"name":        netName,
-					"mac_address": strings.ToUpper(addrs[0].OSEXTIPSMACAddr),
-					"ip_address":  addrs[0].Addr,
-				}
-				netInfo = append(netInfo, net)
+
+		// Iterate over user-provided networks and IPs
+		for i, networkID := range networkIDs {
+			ip := strings.TrimSpace(ipAddresses[i])
+			fixedIPs := []string{}
+			if ip != "" {
+				fixedIPs = append(fixedIPs, ip)
 			}
+
+			fmt.Printf("Attaching network %s to VM %s...\n", networkID, resp.Server.ID)
+
+			// Call API to attach the network interface
+			interfaceResp, err := api.AttachNetworkToVM(computeURL, tok.Value, resp.Server.ID, networkID, "", "", fixedIPs)
+			if err != nil {
+				fmt.Printf("Failed to attach network with ip %s, retrying as unmanaged iface\n", ip)
+
+				// Retry without fixed IP (unmanaged interface)
+				interfaceResp, err = api.AttachNetworkToVM(computeURL, tok.Value, resp.Server.ID, networkID, "", "", nil)
+				if err != nil {
+					fmt.Printf("Failed to attach network %s without fixed IP: %v\n", networkID, err)
+					return fmt.Errorf("failed to attach network %s even without fixed IP", networkID)
+				}
+				fmt.Printf("Successfully attached unmanaged iface %s.\n", networkID)
+			} else {
+				fmt.Printf("Successfully attached network %s with fixed IP %s.\n", networkID, ip)
+			}
+
+			// Extract MAC address from the response
+			macAddress := strings.ToUpper(interfaceResp.InterfaceAttachment.MacAddr)
+			if macAddress == "" {
+				macAddress = "UNKNOWN"
+			}
+
+			// Extract IP from response, if available (otherwise, use user-provided)
+			attachedIP := ip // Default to user input
+			if len(interfaceResp.InterfaceAttachment.FixedIPs) > 0 {
+				attachedIP = interfaceResp.InterfaceAttachment.FixedIPs[0].IPAddress
+			}
+
+			// Append to network info
+			netInfo = append(netInfo, map[string]interface{}{
+				"network_id":  networkID,
+				"mac_address": macAddress,
+				"ip_address":  attachedIP,
+			})
+			time.Sleep(10 * time.Second) // sleep to ensure network is attached before next iteration
 		}
+
+		// Add network details to output
 		if len(netInfo) > 0 {
 			details["networks"] = netInfo
 		}
