@@ -19,6 +19,14 @@ type Network struct {
 	AvailabilityZones       []string `json:"availability_zones"`
 	ProviderNetworkType     string   `json:"provider:network_type"`
 	ProviderPhysicalNetwork string   `json:"provider:physical_network"`
+	PortSecurityEnabled     bool     `json:"port_security_enabled"`
+	SubnetIDs               []string `json:"subnets"`
+}
+
+type Subnet struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	CIDR string `json:"cidr"`
 }
 
 // NetworkListResponse represents the response for listing networks.
@@ -127,4 +135,29 @@ func AttachNetworkToVM(computeURL, token, vmID, networkID, portID, tag string, f
 	}
 
 	return result, nil
+}
+
+// GetSubnetDetails fetches the details of a subnet by its ID.
+func GetSubnetDetails(baseURL, token, subnetID string) (Subnet, error) {
+	var wrapper struct {
+		Subnet Subnet `json:"subnet"`
+	}
+
+	url := fmt.Sprintf("%s/v2.0/subnets/%s", baseURL, subnetID)
+
+	apiResp, err := callGET(url, token)
+	if err != nil {
+		return wrapper.Subnet, fmt.Errorf("failed to fetch subnet details: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return wrapper.Subnet, fmt.Errorf("get subnet details request failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &wrapper)
+	if err != nil {
+		return wrapper.Subnet, fmt.Errorf("failed to parse subnet details response: %v", err)
+	}
+
+	return wrapper.Subnet, nil
 }

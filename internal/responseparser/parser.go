@@ -166,11 +166,13 @@ type Network struct {
 	Project  string
 	Shared   bool
 	External bool
+	PortSec  bool
+	CIDRs    string
 }
 
 func PrintNetworksTable(nets []Network) {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"NAME", "ID", "STATUS", "PROJECT", "SHARED", "EXTERNAL"})
+	table.SetHeader([]string{"NAME", "ID", "STATUS", "PROJECT", "MANAGED", "CIDRs"})
 
 	applyTableStyle(table)
 
@@ -180,8 +182,8 @@ func PrintNetworksTable(nets []Network) {
 			n.ID,
 			colorStyleStatus(n.Status),
 			n.Project,
-			colorStyleBool(n.Shared),
-			colorStyleBool(n.External),
+			colorStyleBool(n.PortSec),
+			n.CIDRs,
 		})
 	}
 	table.Render()

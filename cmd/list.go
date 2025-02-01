@@ -236,6 +236,15 @@ var listNetworksCmd = &cobra.Command{
 		var filteredNetworks []responseparser.Network
 		for _, n := range resp.Networks {
 			if nameFilter == "" || strings.Contains(strings.ToLower(n.Name), strings.ToLower(nameFilter)) {
+				CIDRs := ""
+				for _, subnetID := range n.SubnetIDs {
+					subnet, _ := api.GetSubnetDetails(networkURL, tok.Value, subnetID)
+					CIDRs += subnet.CIDR
+					if subnetID != n.SubnetIDs[len(n.SubnetIDs)-1] {
+						CIDRs += ", "
+					}
+				}
+
 				filteredNetworks = append(filteredNetworks, responseparser.Network{
 					ID:       n.ID,
 					Name:     n.Name,
@@ -243,6 +252,8 @@ var listNetworksCmd = &cobra.Command{
 					Project:  n.ProjectID,
 					Shared:   n.Shared,
 					External: n.RouterExternal,
+					PortSec:  n.PortSecurityEnabled,
+					CIDRs:    CIDRs,
 				})
 			}
 		}
