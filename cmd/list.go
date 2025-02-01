@@ -23,7 +23,7 @@ var listDomainsCmd = &cobra.Command{
 	Short: "List domains [Req: admin]",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Call the API
-		resp, err := api.ListDomains(vhiHost, tok.Value)
+		resp, err := api.ListDomains(tok.Host, tok.Value)
 		if err != nil {
 			return err
 		}

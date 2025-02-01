@@ -26,11 +26,8 @@ var (
 		// Run: func(cmd *cobra.Command, args []string) { },
 	}
 
-	authToken  string
-	computeURL string
-	cfgFile    string
-	vhiHost    string
-	tok        api.Token
+	cfgFile string
+	tok     api.Token
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -68,18 +65,13 @@ func init() {
 			return nil
 		}
 
-		vhiHost = host
-
-		if authToken == "" {
-			var err error
-			tok, err = api.LoadTokenStruct(host)
-			if err != nil {
-				if err.Error() == "token for "+host+" is expired" {
-					return fmt.Errorf("the auth token for '%s' is expired; re-authenticate using 'vhicmd auth'", host)
-				}
-				return fmt.Errorf("no valid auth token found on disk for host '%s'; run 'vhicmd auth' first", host)
+		var err error
+		tok, err = api.LoadTokenStruct(host)
+		if err != nil {
+			if err.Error() == "token for "+host+" is expired" {
+				return fmt.Errorf("the auth token for '%s' is expired; re-authenticate using 'vhicmd auth'", host)
 			}
-			authToken = tok.Value
+			return fmt.Errorf("no valid auth token found on disk for host '%s'; run 'vhicmd auth' first", host)
 		}
 
 		return nil

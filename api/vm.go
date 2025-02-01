@@ -64,8 +64,8 @@ func (i *ImageField) UnmarshalJSON(data []byte) error {
 type NetworkAddress struct {
 	OSEXTIPSMACAddr string `json:"OS-EXT-IPS-MAC:mac_addr"`
 	Version         int    `json:"version"`
-	Addr            string `json:"addr"`
-	OSEXTIPSType    string `json:"OS-EXT-IPS:type"`
+	Addr            string `json:"addr,omitempty"`
+	OSEXTIPSType    string `json:"OS-EXT-IPS:type,omitempty"`
 	NetworkUUID     string // (Populated from parent network info if needed)
 }
 

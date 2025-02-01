@@ -83,35 +83,30 @@ var vmDetailsCmd = &cobra.Command{
 		}
 
 		// Process networks
-		for netName, addrs := range vm.Addresses {
+		seenMACs := make(map[string]bool)
+		for _, hciNet := range vm.HCIInfo.Network {
+			if seenMACs[hciNet.Mac] {
+				continue
+			}
+
 			netDetail := responseparser.NetworkDetail{
-				Name: netName,
+				Name:    hciNet.Network.Label,
+				UUID:    hciNet.Network.ID,
+				MacAddr: hciNet.Mac,
 			}
 
-			// Get first MAC address for the network
-			if len(addrs) > 0 {
-				netDetail.MacAddr = addrs[0].OSEXTIPSMACAddr
-			}
-
-			// Get UUID from HCI info if available
-			if vm.HCIInfo.Network != nil {
-				for _, n := range vm.HCIInfo.Network {
-					if n.Mac == netDetail.MacAddr {
-						netDetail.UUID = n.Network.ID
-						break
-					}
+			// Add IPs if they exist in vm.Addresses
+			if addrs, ok := vm.Addresses[hciNet.Network.Label]; ok {
+				for _, addr := range addrs {
+					netDetail.IPs = append(netDetail.IPs, responseparser.IPDetail{
+						Address: addr.Addr,
+						Version: addr.Version,
+						Type:    addr.OSEXTIPSType,
+					})
 				}
 			}
 
-			// Process all IPs for this network
-			for _, addr := range addrs {
-				netDetail.IPs = append(netDetail.IPs, responseparser.IPDetail{
-					Address: addr.Addr,
-					Version: addr.Version,
-					Type:    addr.OSEXTIPSType,
-				})
-			}
-
+			seenMACs[hciNet.Mac] = true
 			details.Networks = append(details.Networks, netDetail)
 		}
 

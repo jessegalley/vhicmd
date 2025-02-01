@@ -312,15 +312,28 @@ func PrintVMDetailsTable(details []VMDetails) {
 
 	for _, net := range d.Networks {
 		netName := color.Style{color.FgGreen}.Render(net.Name)
-		for _, ip := range net.IPs {
+		if len(net.IPs) == 0 {
+			// Show unmanaged networks
 			netTable.Append([]string{
 				netName,
-				ip.Address,
-				ip.Type,
-				fmt.Sprintf("IPv%d", ip.Version),
+				"N/A",
+				"N/A",
+				"N/A",
 				net.MacAddr,
 				net.UUID,
 			})
+		} else {
+			// Show networks with IPs
+			for _, ip := range net.IPs {
+				netTable.Append([]string{
+					netName,
+					ip.Address,
+					ip.Type,
+					fmt.Sprintf("IPv%d", ip.Version),
+					net.MacAddr,
+					net.UUID,
+				})
+			}
 		}
 	}
 	netTable.Render()
