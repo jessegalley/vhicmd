@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 )
 
@@ -24,6 +25,17 @@ type Image struct {
 	Protected     bool     `json:"protected"`
 	DirectURL     string   `json:"direct_url,omitempty"`
 	TraitRequired string   `json:"trait:CUSTOM_HCI_122E856B9E9C4D80A0F8C21591B5AFCB,omitempty"`
+}
+
+type CreateImageRequest struct {
+	Name         string   `json:"name"`
+	ContainerFmt string   `json:"container_format"` // bare, ovf, ova, aki, ari, ami
+	DiskFmt      string   `json:"disk_format"`      // raw, vhd, vmdk, vdi, iso, qcow2, aki, ari, ami
+	MinDisk      int      `json:"min_disk,omitempty"`
+	MinRAM       int      `json:"min_ram,omitempty"`
+	Protected    bool     `json:"protected,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+	Visibility   string   `json:"visibility,omitempty"`
 }
 
 // ImageListResponse is the structure for the API response.
@@ -64,4 +76,76 @@ func ListImages(computeURL, token string, queryParams map[string]string) (ImageL
 	}
 
 	return result, nil
+}
+
+// DeleteImage deletes an image by ID.
+func DeleteImage(computeURL, token, imageID string) error {
+	url := fmt.Sprintf("%s/v2/images/%s", computeURL, imageID)
+
+	apiResp, err := callDELETE(url, token)
+	if err != nil {
+		return fmt.Errorf("failed to delete image: %v", err)
+	}
+	if apiResp.ResponseCode != 204 {
+		return fmt.Errorf("delete image request failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// CreateImage initiates image creation and returns the image ID
+func createImage(computeURL, token string, req CreateImageRequest) (Image, error) {
+	var result Image
+	url := fmt.Sprintf("%s/v2/images", computeURL)
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return result, fmt.Errorf("marshal failed: %v", err)
+	}
+
+	apiResp, err := callPOST(url, token, string(body))
+	if err != nil {
+		return result, fmt.Errorf("create failed: %v", err)
+	}
+
+	if apiResp.ResponseCode != 201 {
+		return result, fmt.Errorf("create failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &result)
+	if err != nil {
+		return result, fmt.Errorf("unmarshal failed: %v", err)
+	}
+
+	return result, nil
+}
+
+// UploadImageData uploads the actual image data
+func uploadImageData(computeURL, token, imageID string, data io.Reader) error {
+	url := fmt.Sprintf("%s/v2/images/%s/file", computeURL, imageID)
+	apiResp, err := callBigPUT(url, token, data)
+	if err != nil {
+		return fmt.Errorf("upload failed: %v", err)
+	}
+
+	if apiResp.ResponseCode != 204 {
+		return fmt.Errorf("upload failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// CreateAndUploadImage creates an image and uploads the image data
+func CreateAndUploadImage(computeURL, token string, req CreateImageRequest, data io.Reader) (Image, error) {
+	image, err := createImage(computeURL, token, req)
+	if err != nil {
+		return image, fmt.Errorf("failed to create image: %v", err)
+	}
+
+	err = uploadImageData(computeURL, token, image.ID, data)
+	if err != nil {
+		return image, fmt.Errorf("failed to upload image data: %v", err)
+	}
+
+	return image, nil
 }

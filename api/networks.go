@@ -21,6 +21,7 @@ type Network struct {
 	ProviderPhysicalNetwork string   `json:"provider:physical_network"`
 	PortSecurityEnabled     bool     `json:"port_security_enabled"`
 	SubnetIDs               []string `json:"subnets"`
+	PortIDs                 []string `json:"ports"`
 }
 
 type Subnet struct {
@@ -135,6 +136,22 @@ func AttachNetworkToVM(computeURL, token, vmID, networkID, portID, tag string, f
 	}
 
 	return result, nil
+}
+
+// DetachNetworkFromVM detaches a network interface from a VM.
+func DetachNetworkFromVM(computeURL, token, vmID, portID string) error {
+	url := fmt.Sprintf("%s/servers/%s/os-interface/%s", computeURL, vmID, portID)
+
+	apiResp, err := callDELETE(url, token)
+	if err != nil {
+		return fmt.Errorf("failed to detach network: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return fmt.Errorf("detach network request failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
 }
 
 // GetSubnetDetails fetches the details of a subnet by its ID.

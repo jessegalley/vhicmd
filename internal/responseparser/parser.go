@@ -231,11 +231,11 @@ type NetworkDetail struct {
 	IPs     []IPDetail
 	MacAddr string
 	Type    string // e.g. "fixed" or "floating"
+	PortID  string
 }
 
 type IPDetail struct {
 	Address string
-	Version int
 	Type    string
 }
 
@@ -309,7 +309,7 @@ func PrintVMDetailsTable(details []VMDetails) {
 	// Network Details Table
 	fmt.Println("\nNetworks:")
 	netTable := tablewriter.NewWriter(os.Stdout)
-	netTable.SetHeader([]string{"Network Name", "IP Address", "IP Type", "Version", "MAC Address", "Network UUID"})
+	netTable.SetHeader([]string{"Network Name", "IP Address", "MAC Address", "Network UUID", "Port ID"})
 	applyTableStyle(netTable)
 
 	for _, net := range d.Networks {
@@ -330,10 +330,9 @@ func PrintVMDetailsTable(details []VMDetails) {
 				netTable.Append([]string{
 					netName,
 					ip.Address,
-					ip.Type,
-					fmt.Sprintf("IPv%d", ip.Version),
 					net.MacAddr,
 					net.UUID,
+					net.PortID,
 				})
 			}
 		}

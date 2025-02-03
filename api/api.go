@@ -148,3 +148,23 @@ func callDELETE(url, token string) (ApiResponse, error) {
 
 	return apiResp, nil
 }
+
+// callBigPUT is a helper for large binary PUT requests
+func callBigPUT(url, token string, data io.Reader) (ApiResponse, error) {
+	apiResp := ApiResponse{}
+
+	resp, err := httpclient.SendLargePutRequest(url, token, data)
+	if err != nil {
+		return apiResp, fmt.Errorf("error making HTTP PUT request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	apiResp.ResponseCode = resp.StatusCode
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return apiResp, fmt.Errorf("error reading response body: %v", err)
+	}
+	apiResp.Response = string(bodyBytes)
+
+	return apiResp, nil
+}

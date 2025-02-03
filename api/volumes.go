@@ -108,6 +108,7 @@ func CreateVolume(storageURL, token string, request CreateVolumeRequest) (Create
 	return result, nil
 }
 
+// DeleteVolume sends a request to delete a volume.
 func DeleteVolume(storageURL, token, volumeID string) error {
 	url := fmt.Sprintf("%s/volumes/%s", storageURL, volumeID)
 
