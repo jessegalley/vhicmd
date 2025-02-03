@@ -42,7 +42,7 @@ var deleteImageCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		imageID := args[0]
 
-		computeURL, err := validateTokenEndpoint(tok, "compute")
+		computeURL, err := validateTokenEndpoint(tok, "image")
 		if err != nil {
 			return err
 		}
