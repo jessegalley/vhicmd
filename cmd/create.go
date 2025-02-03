@@ -274,7 +274,6 @@ var createVMCmd = &cobra.Command{
 }
 
 // Subcommand: create Image (and upload data)
-
 var createImageCmd = &cobra.Command{
 	Use:   "image",
 	Short: "Create a new image",
@@ -308,7 +307,6 @@ var createImageCmd = &cobra.Command{
 			}
 		}
 
-		// Validate format
 		switch format {
 		case "qcow2", "raw", "vmdk", "iso":
 			// Valid formats
@@ -322,6 +320,20 @@ var createImageCmd = &cobra.Command{
 		}
 		defer file.Close()
 
+		name := flagImageName
+		if name == "" {
+			name = fmt.Sprintf("%s-%s", filepath.Base(flagImageFile), time.Now().Format("20060102-150405"))
+		}
+
+		// Get file size for progress
+		info, err := file.Stat()
+		if err != nil {
+			return fmt.Errorf("failed to stat file: %v", err)
+		}
+
+		fmt.Printf("Starting upload of %s (%d MB)\n", flagImageFile, info.Size()/1024/1024)
+		progressReader := newProgressReader(file, info.Size())
+
 		req := api.CreateImageRequest{
 			Name:         flagImageName,
 			ContainerFmt: "bare",
@@ -329,12 +341,12 @@ var createImageCmd = &cobra.Command{
 			Visibility:   "shared",
 		}
 
-		image, err := api.CreateAndUploadImage(imageURL, tok.Value, req, []byte(data))
+		imageID, err := api.CreateAndUploadImage(imageURL, tok.Value, req, progressReader)
 		if err != nil {
 			return fmt.Errorf("failed to create/upload image: %v", err)
 		}
 
-		fmt.Printf("Image created: ID: %s, Name: %s\n", image.ID, image.Name)
+		fmt.Printf("\nImage created: ID: %s, Name: %s\n", imageID, name)
 		return nil
 	},
 }

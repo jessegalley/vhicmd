@@ -94,30 +94,30 @@ func DeleteImage(computeURL, token, imageID string) error {
 }
 
 // CreateImage initiates image creation and returns the image ID
-func createImage(computeURL, token string, req CreateImageRequest) (Image, error) {
+func createImage(computeURL, token string, req CreateImageRequest) (string, error) {
 	var result Image
 	url := fmt.Sprintf("%s/v2/images", computeURL)
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return result, fmt.Errorf("marshal failed: %v", err)
+		return "", fmt.Errorf("marshal failed: %v", err)
 	}
 
 	apiResp, err := callPOST(url, token, string(body))
 	if err != nil {
-		return result, fmt.Errorf("create failed: %v", err)
+		return "", fmt.Errorf("create failed: %v", err)
 	}
 
 	if apiResp.ResponseCode != 201 {
-		return result, fmt.Errorf("create failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+		return "", fmt.Errorf("create failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
 	}
 
 	err = json.Unmarshal([]byte(apiResp.Response), &result)
 	if err != nil {
-		return result, fmt.Errorf("unmarshal failed: %v", err)
+		return "", fmt.Errorf("unmarshal failed: %v", err)
 	}
 
-	return result, nil
+	return result.ID, nil
 }
 
 // UploadImageData uploads the actual image data
@@ -136,16 +136,16 @@ func uploadImageData(computeURL, token, imageID string, data io.Reader) error {
 }
 
 // CreateAndUploadImage creates an image and uploads the image data
-func CreateAndUploadImage(computeURL, token string, req CreateImageRequest, data io.Reader) (Image, error) {
-	image, err := createImage(computeURL, token, req)
+func CreateAndUploadImage(computeURL, token string, req CreateImageRequest, data io.Reader) (string, error) {
+	imageID, err := createImage(computeURL, token, req)
 	if err != nil {
-		return image, fmt.Errorf("failed to create image: %v", err)
+		return imageID, fmt.Errorf("failed to create image: %v", err)
 	}
 
-	err = uploadImageData(computeURL, token, image.ID, data)
+	err = uploadImageData(computeURL, token, imageID, data)
 	if err != nil {
-		return image, fmt.Errorf("failed to upload image data: %v", err)
+		return imageID, fmt.Errorf("failed to upload image data: %v", err)
 	}
 
-	return image, nil
+	return imageID, nil
 }
