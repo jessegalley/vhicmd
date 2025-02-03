@@ -11,6 +11,7 @@ import (
 	"github.com/jessegalley/vhicmd/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	//spew
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -26,11 +27,9 @@ var (
 		// Run: func(cmd *cobra.Command, args []string) { },
 	}
 
-	authToken  string
-	computeURL string
-	cfgFile    string
-	vhiHost    string
-	tok        api.Token
+	cfgFile   string
+	tok       api.Token
+	debugMode bool
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -51,14 +50,14 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug mode")
+	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
 	rootCmd.PersistentFlags().StringP("host", "H", "", "VHI host to connect to")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vhirc)")
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		// If this is the "auth" command, skip the token loading
-		if cmd.Name() == "auth" || (cmd.Parent() != nil && cmd.Parent().Name() == "config") {
-			return nil
-		}
-
+		debug, _ := cmd.Flags().GetBool("debug")
+		viper.Set("debug", debug)
+		debugMode = debug
 		hostFlag, _ := cmd.Flags().GetString("host")
 		host := hostFlag
 		if host == "" {
@@ -68,18 +67,18 @@ func init() {
 			return fmt.Errorf("no host found in flags or config. Provide --host or set 'host' in .vhirc")
 		}
 
-		vhiHost = host
+		// If this is the "auth" command, skip the token loading
+		if cmd.Name() == "auth" || (cmd.Parent() != nil && cmd.Parent().Name() == "config") {
+			return nil
+		}
 
-		if authToken == "" {
-			var err error
-			tok, err = api.LoadTokenStruct(host)
-			if err != nil {
-				if err.Error() == "token for "+host+" is expired" {
-					return fmt.Errorf("the auth token for '%s' is expired; re-authenticate using 'vhicmd auth'", host)
-				}
-				return fmt.Errorf("no valid auth token found on disk for host '%s'; run 'vhicmd auth' first", host)
+		var err error
+		tok, err = api.LoadTokenStruct(host)
+		if err != nil {
+			if err.Error() == "token for "+host+" is expired" {
+				return fmt.Errorf("the auth token for '%s' is expired; re-authenticate using 'vhicmd auth'", host)
 			}
-			authToken = tok.Value
+			return fmt.Errorf("no valid auth token found on disk for host '%s'; run 'vhicmd auth' first", host)
 		}
 
 		return nil
@@ -87,6 +86,7 @@ func init() {
 }
 
 func initConfig() {
+	viper.AutomaticEnv()
 	v, err := config.InitConfig(cfgFile)
 	if err != nil {
 		fmt.Printf("Error reading config: %v\n", err)

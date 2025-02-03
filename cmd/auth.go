@@ -75,7 +75,15 @@ For admin access, use "default" and "admin" respectively.`,
 			}
 		}
 
-		host := viper.GetString("host")
+		host := flagHost // Get host from flag
+		if host == "" {
+			host = viper.GetString("host")
+		}
+		if host == "" {
+			fmt.Printf("ERROR: no host found in flags or config. Provide --host or set 'host' in .vhirc\n")
+			os.Exit(2)
+		}
+
 		_, err := getAuthToken(host, domain, project, username, password)
 		if err != nil {
 			fmt.Printf("ERROR: %v\n", err)
@@ -93,6 +101,7 @@ For admin access, use "default" and "admin" respectively.`,
 			}
 
 			if saveConfig {
+				viper.Set("host", host)
 				viper.Set("username", username)
 				viper.Set("password", password)
 				viper.Set("domain", domain)

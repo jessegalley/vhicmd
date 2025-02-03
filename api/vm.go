@@ -10,10 +10,11 @@ import (
 // CreateVMRequest defines the payload structure for creating a VM.
 type CreateVMRequest struct {
 	Server struct {
-		Name                 string                   `json:"name"`
-		FlavorRef            string                   `json:"flavorRef"`
-		ImageRef             string                   `json:"imageRef,omitempty"`
-		Networks             []map[string]string      `json:"networks"`
+		Name      string `json:"name"`
+		FlavorRef string `json:"flavorRef"`
+		ImageRef  string `json:"imageRef,omitempty"`
+		//Networks             []map[string]string      `json:"networks"`
+		Networks             string                   `json:"networks"`
 		BlockDeviceMappingV2 []map[string]interface{} `json:"block_device_mapping_v2,omitempty"`
 		KeyName              string                   `json:"key_name,omitempty"`
 		AdminPass            string                   `json:"adminPass,omitempty"`
@@ -63,8 +64,8 @@ func (i *ImageField) UnmarshalJSON(data []byte) error {
 type NetworkAddress struct {
 	OSEXTIPSMACAddr string `json:"OS-EXT-IPS-MAC:mac_addr"`
 	Version         int    `json:"version"`
-	Addr            string `json:"addr"`
-	OSEXTIPSType    string `json:"OS-EXT-IPS:type"`
+	Addr            string `json:"addr,omitempty"`
+	OSEXTIPSType    string `json:"OS-EXT-IPS:type,omitempty"`
 	NetworkUUID     string // (Populated from parent network info if needed)
 }
 
@@ -396,4 +397,18 @@ func WaitForStatus(computeURL, token, vmID string, targetStatus string) (VMDetai
 		time.Sleep(10 * time.Second)
 	}
 	return VMDetail{}, fmt.Errorf("timeout waiting for VM to reach status %q", targetStatus)
+}
+
+// DeleteVM sends a request to delete a VM.
+func DeleteVM(computeURL, token, vmID string) error {
+	url := fmt.Sprintf("%s/servers/%s", computeURL, vmID)
+
+	resp, err := callDELETE(url, token)
+	if err != nil {
+		return fmt.Errorf("failed to delete VM: %v", err)
+	}
+	if resp.ResponseCode != 204 {
+		return fmt.Errorf("failed to delete VM [%d]: %s", resp.ResponseCode, resp.Response)
+	}
+	return nil
 }

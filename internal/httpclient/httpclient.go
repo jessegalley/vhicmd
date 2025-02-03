@@ -2,10 +2,14 @@ package httpclient
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 const requestTimeout = 5 * time.Second
@@ -24,6 +28,18 @@ func SendRequest(url string, jsonData []byte) (*http.Response, error) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
 
+	if viper.GetBool("debug") {
+		printDebugDivider("request")
+		fmt.Printf("\033[1;32mURL:\033[0m %s\n", url)
+		fmt.Printf("\033[1;32mMethod:\033[0m %s\n", req.Method)
+		printDebugDivider("request headers")
+		printHeaders(req.Header)
+		if len(jsonData) > 0 {
+			printDebugDivider("request body")
+			fmt.Println(prettyPrintJSON(jsonData))
+		}
+	}
+
 	client := &http.Client{
 		Timeout: requestTimeout,
 	}
@@ -32,17 +48,33 @@ func SendRequest(url string, jsonData []byte) (*http.Response, error) {
 		return nil, fmt.Errorf("failed to send HTTP request: %w", err)
 	}
 
+	if viper.GetBool("debug") {
+		printDebugDivider("response")
+		fmt.Printf("\033[1;32mStatus:\033[0m %s\n", resp.Status)
+		printDebugDivider("response headers")
+		printHeaders(resp.Header)
+
+		if resp.Body != nil {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			if len(bodyBytes) > 0 {
+				printDebugDivider("response body")
+				fmt.Println(prettyPrintJSON(bodyBytes))
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
+	}
+
 	return resp, nil
 }
 
 // SendRequestWithToken can handle both GET and POST requests with a timeout and a custom User-Agent.
 func SendRequestWithToken(method, url, token string, body io.Reader) (*http.Response, error) {
 	// Read and reassign the body for logging if it's not nil
-	//var bodyBytes []byte
-	//if body != nil {
-	//	bodyBytes, _ = io.ReadAll(body)
-	//	body = bytes.NewReader(bodyBytes) // Rebuild the body for reuse
-	//}
+	var bodyBytes []byte
+	if body != nil && viper.GetBool("debug") {
+		bodyBytes, _ = io.ReadAll(body)
+		body = bytes.NewReader(bodyBytes) // Rebuild the body for reuse
+	}
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -62,25 +94,17 @@ func SendRequestWithToken(method, url, token string, body io.Reader) (*http.Resp
 	// We need this header set for BlockDeviceMappingV2.VolumeType
 	req.Header.Set("X-OpenStack-Nova-API-Version", "2.72")
 
-	// Log the complete request
-	//fmt.Printf("\nRequest:\n")
-	//fmt.Printf("Method: %s\n", req.Method)
-	//fmt.Printf("URL: %s\n", req.URL.String())
-	//fmt.Println("Headers:")
-	//for key, values := range req.Header {
-	//	for _, value := range values {
-	//		fmt.Printf("  %s: %s\n", key, value)
-	//	}
-	//}
-	//if bodyBytes != nil {
-	//	fmt.Println("Body:")
-	//	var prettyJSON bytes.Buffer
-	//	if json.Indent(&prettyJSON, bodyBytes, "", "  ") == nil {
-	//		fmt.Println(prettyJSON.String())
-	//	} else {
-	//		fmt.Println(string(bodyBytes))
-	//	}
-	//}
+	if viper.GetBool("debug") {
+		printDebugDivider("request")
+		fmt.Printf("\033[1;32mURL:\033[0m %s\n", url)
+		fmt.Printf("\033[1;32mMethod:\033[0m %s\n", req.Method)
+		printDebugDivider("request headers")
+		printHeaders(req.Header)
+		if len(bodyBytes) > 0 {
+			printDebugDivider("request body")
+			fmt.Println(prettyPrintJSON(bodyBytes))
+		}
+	}
 
 	// Send the request
 	client := &http.Client{Timeout: requestTimeout}
@@ -89,28 +113,45 @@ func SendRequestWithToken(method, url, token string, body io.Reader) (*http.Resp
 		return nil, fmt.Errorf("failed to send HTTP request: %w", err)
 	}
 
-	// Log the response body if available
-	//if resp.Body != nil {
-	//	defer resp.Body.Close()
-	//	respBody, _ := io.ReadAll(resp.Body)
-	//	fmt.Printf("\nResponse:\n")
-	//	fmt.Printf("Status: %s\n", resp.Status)
-	//	fmt.Println("Headers:")
-	//	for key, values := range resp.Header {
-	//		for _, value := range values {
-	//			fmt.Printf("  %s: %s\n", key, value)
-	//		}
-	//	}
-	//	fmt.Println("Body:")
-	//	var prettyJSON bytes.Buffer
-	//	if json.Indent(&prettyJSON, respBody, "", "  ") == nil {
-	//		fmt.Println(prettyJSON.String())
-	//	} else {
-	//		fmt.Println(string(respBody))
-	//	}
-	//	// Restore the response body for further use
-	//	resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
-	//}
+	if viper.GetBool("debug") {
+		printDebugDivider("response")
+		fmt.Printf("\033[1;32mStatus:\033[0m %s\n", resp.Status)
+		printDebugDivider("response headers")
+		printHeaders(resp.Header)
+
+		if resp.Body != nil {
+			respBytes, _ := io.ReadAll(resp.Body)
+			if len(respBytes) > 0 {
+				printDebugDivider("response body")
+				fmt.Println(prettyPrintJSON(respBytes))
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(respBytes))
+		}
+	}
 
 	return resp, nil
+}
+
+// -- DEBUGGING --
+
+// printDebugDivider prints a section divider
+func printDebugDivider(title string) {
+	fmt.Printf("\n\033[1;36m=== %s ===\033[0m\n", strings.ToUpper(title))
+}
+
+// prettyPrintJSON formats JSON with indentation
+func prettyPrintJSON(data []byte) string {
+	var prettyJSON bytes.Buffer
+	err := json.Indent(&prettyJSON, data, "", "    ")
+	if err != nil {
+		return string(data) // Fallback to raw if not valid JSON
+	}
+	return prettyJSON.String()
+}
+
+// printHeaders pretty prints HTTP headers
+func printHeaders(headers http.Header) {
+	for key, values := range headers {
+		fmt.Printf("    \033[1;33m%s\033[0m: %s\n", key, strings.Join(values, ", "))
+	}
 }
