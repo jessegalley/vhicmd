@@ -335,7 +335,7 @@ var createImageCmd = &cobra.Command{
 		progressReader := newProgressReader(file, info.Size())
 
 		req := api.CreateImageRequest{
-			Name:         flagImageName,
+			Name:         name,
 			ContainerFmt: "bare",
 			DiskFmt:      format,
 			Visibility:   "shared",

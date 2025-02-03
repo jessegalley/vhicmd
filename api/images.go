@@ -98,12 +98,7 @@ func createImage(computeURL, token string, req CreateImageRequest) (string, erro
 	var result Image
 	url := fmt.Sprintf("%s/v2/images", computeURL)
 
-	body, err := json.Marshal(req)
-	if err != nil {
-		return "", fmt.Errorf("marshal failed: %v", err)
-	}
-
-	apiResp, err := callPOST(url, token, string(body))
+	apiResp, err := callPOST(url, token, req)
 	if err != nil {
 		return "", fmt.Errorf("create failed: %v", err)
 	}
