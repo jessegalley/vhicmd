@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"syscall"
@@ -12,6 +13,34 @@ import (
 	"github.com/jessegalley/vhicmd/api"
 	"golang.org/x/term"
 )
+
+type progressReader struct {
+    reader     io.Reader
+    total      int64
+    downloaded int64
+}
+
+func newProgressReader(reader io.Reader, total int64) *progressReader {
+    return &progressReader{
+        reader: reader,
+        total:  total,
+    }
+}
+
+func (pr *progressReader) Read(p []byte) (int, error) {
+    n, err := pr.reader.Read(p)
+    pr.downloaded += int64(n)
+
+    // Calculate percentage
+    percent := float64(pr.downloaded) * 100 / float64(pr.total)
+    fmt.Printf("\rUploading: %.2f%% (%d/%d MB)", percent, pr.downloaded/1024/1024, pr.total/1024/1024)
+
+    if err == io.EOF {
+        fmt.Println() // New line on completion
+    }
+
+    return n, err
+}
 
 // readUsernameFromStdin() prompts the user for a username
 // on stdout and then reads in and returns what they enter

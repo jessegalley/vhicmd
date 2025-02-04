@@ -82,8 +82,16 @@ var vmDetailsCmd = &cobra.Command{
 			Metadata: vm.Metadata,
 		}
 
-		// Process networks
+		// Fetch network details (for managed networks)
+		networkPorts, err := api.GetVMNetworks(computeURL, tok.Value, vmID)
+		if err != nil {
+			return err
+		}
+
+		// Track MACs to avoid duplication
 		seenMACs := make(map[string]bool)
+
+		// Process HCI networks and match with NetID from GetVMNetworks
 		for _, hciNet := range vm.HCIInfo.Network {
 			if seenMACs[hciNet.Mac] {
 				continue
@@ -93,17 +101,27 @@ var vmDetailsCmd = &cobra.Command{
 				Name:    hciNet.Network.Label,
 				UUID:    hciNet.Network.ID,
 				MacAddr: hciNet.Mac,
+				PortID:  "N/A", // Default, updated if found
 			}
 
-			// Add IPs if they exist in vm.Addresses
-			if addrs, ok := vm.Addresses[hciNet.Network.Label]; ok {
-				for _, addr := range addrs {
-					netDetail.IPs = append(netDetail.IPs, responseparser.IPDetail{
-						Address: addr.Addr,
-						Version: addr.Version,
-						Type:    addr.OSEXTIPSType,
-					})
+			// Match with networkPorts.InterfaceAttachments using NetID
+			for _, port := range networkPorts.InterfaceAttachments {
+				if port.NetID == hciNet.Network.ID {
+					netDetail.PortID = port.PortID
+
+					// Add IPs if they exist
+					for _, ip := range port.FixedIPs {
+						netDetail.IPs = append(netDetail.IPs, responseparser.IPDetail{
+							Address: ip.IPAddress,
+						})
+					}
+					break
 				}
+			}
+
+			// If there are no IPs, it's an unmanaged network, but still has a Port ID
+			if len(netDetail.IPs) == 0 {
+				netDetail.IPs = []responseparser.IPDetail{{Address: "N/A"}}
 			}
 
 			seenMACs[hciNet.Mac] = true

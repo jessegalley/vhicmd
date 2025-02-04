@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -174,11 +176,6 @@ var createVMCmd = &cobra.Command{
 
 		// Create the VM
 		fmt.Printf("Creating VM %s...\n", flagVMName)
-		//fmt.Printf("Full req, URL: %s, Request: %s\n", computeURL,
-		//	func() string {
-		//		j, _ := json.Marshal(request)
-		//		return string(j)
-		//	}())
 		resp, err := api.CreateVM(computeURL, tok.Value, request)
 		if err != nil {
 			return fmt.Errorf("failed to create VM: %v", err)
@@ -218,7 +215,6 @@ var createVMCmd = &cobra.Command{
 				// Retry without fixed IP (unmanaged interface)
 				interfaceResp, err = api.AttachNetworkToVM(computeURL, tok.Value, resp.Server.ID, networkID, "", "", nil)
 				if err != nil {
-					fmt.Printf("Failed to attach network %s without fixed IP: %v\n", networkID, err)
 					return fmt.Errorf("failed to attach network %s even without fixed IP", networkID)
 				}
 				fmt.Printf("Successfully attached unmanaged iface %s.\n", networkID)
@@ -277,6 +273,84 @@ var createVMCmd = &cobra.Command{
 	},
 }
 
+// Subcommand: create Image (and upload data)
+var createImageCmd = &cobra.Command{
+	Use:   "image",
+	Short: "Create a new image",
+	Long:  "Create a new image from a VM snapshot (.qcow2, .raw, .vmdk, .iso)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		imageURL, err := validateTokenEndpoint(tok, "image")
+		if err != nil {
+			return err
+		}
+
+		// Validate file exists
+		if _, err := os.Stat(flagImageFile); os.IsNotExist(err) {
+			return fmt.Errorf("image file not found: %s", flagImageFile)
+		}
+
+		// Determine format from flag or file extension if not specified
+		format := flagDiskFormat
+		if format == "" {
+			ext := strings.ToLower(filepath.Ext(flagImageFile))
+			switch ext {
+			case ".qcow2":
+				format = "qcow2"
+			case ".raw":
+				format = "raw"
+			case ".vmdk":
+				format = "vmdk"
+			case ".iso":
+				format = "iso"
+			default:
+				return fmt.Errorf("unsupported image format %s, must specify --format flag", ext)
+			}
+		}
+
+		switch format {
+		case "qcow2", "raw", "vmdk", "iso":
+			// Valid formats
+		default:
+			return fmt.Errorf("unsupported format %s, must be qcow2, raw, vmdk or iso", format)
+		}
+
+		file, err := os.Open(flagImageFile)
+		if err != nil {
+			return fmt.Errorf("failed to open image file: %v", err)
+		}
+		defer file.Close()
+
+		name := flagImageName
+		if name == "" {
+			name = fmt.Sprintf("%s-%s", filepath.Base(flagImageFile), time.Now().Format("20060102-150405"))
+		}
+
+		// Get file size for progress
+		info, err := file.Stat()
+		if err != nil {
+			return fmt.Errorf("failed to stat file: %v", err)
+		}
+
+		fmt.Printf("Starting upload of %s (%d MB)\n", flagImageFile, info.Size()/1024/1024)
+		progressReader := newProgressReader(file, info.Size())
+
+		req := api.CreateImageRequest{
+			Name:         name,
+			ContainerFmt: "bare",
+			DiskFmt:      format,
+			Visibility:   "shared",
+		}
+
+		imageID, err := api.CreateAndUploadImage(imageURL, tok.Value, req, progressReader)
+		if err != nil {
+			return fmt.Errorf("failed to create/upload image: %v", err)
+		}
+
+		fmt.Printf("\nImage created: ID: %s, Name: %s\n", imageID, name)
+		return nil
+	},
+}
+
 // Subcommand: create volume
 var createVolumeCmd = &cobra.Command{
 	Use:   "volume",
@@ -316,6 +390,9 @@ var (
 	flagVMSize            int
 	flagVMNetboot         bool
 	flagUserData          string
+	flagImageFile         string
+	flagImageName         string
+	flagDiskFormat        string
 )
 
 func init() {
@@ -346,9 +423,15 @@ func init() {
 	createVolumeCmd.MarkFlagRequired("name")
 	createVolumeCmd.MarkFlagRequired("size")
 
+	// Flags for create image
+	createImageCmd.Flags().StringVar(&flagImageFile, "file", "", "Path to the image file")
+	createImageCmd.Flags().StringVar(&flagImageName, "name", "", "Name of the image")
+	createImageCmd.Flags().StringVar(&flagDiskFormat, "format", "", "Disk format (qcow2, raw, vmdk)")
+
 	// Add subcommands to the parent create command
 	createCmd.AddCommand(createVMCmd)
 	createCmd.AddCommand(createVolumeCmd)
+	createCmd.AddCommand(createImageCmd)
 
 	// Add the create command to the root command
 	rootCmd.AddCommand(createCmd)

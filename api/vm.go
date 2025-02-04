@@ -151,6 +151,20 @@ type HCIInfo struct {
 	Network []NetworkInfo `json:"network"`
 }
 
+type VMNetworkListResponse struct {
+	InterfaceAttachments []struct {
+		PortState string `json:"port_state"`
+		FixedIPs  []struct {
+			IPAddress string `json:"ip_address"`
+			SubnetID  string `json:"subnet_id"`
+		} `json:"fixed_ips"`
+		PortID  string `json:"port_id"`
+		NetID   string `json:"net_id"`
+		MacAddr string `json:"mac_addr"`
+		Tag     string `json:"tag,omitempty"`
+	} `json:"interfaceAttachments"`
+}
+
 // VMListResponse represents the JSON structure for the list of VMs.
 type VMListResponse struct {
 	Servers []VM `json:"servers"`
@@ -251,6 +265,27 @@ func CreateVM(computeURL, token string, request CreateVMRequest) (CreateVMRespon
 	err = json.Unmarshal([]byte(apiResp.Response), &result)
 	if err != nil {
 		return result, fmt.Errorf("failed to parse VM create response: %v", err)
+	}
+	return result, nil
+}
+
+func GetVMNetworks(computeURL, token, vmID string) (VMNetworkListResponse, error) {
+	var result VMNetworkListResponse
+
+	url := fmt.Sprintf("%s/servers/%s/os-interface", computeURL, vmID)
+
+	apiResp, err := callGET(url, token)
+	if err != nil {
+		return result, fmt.Errorf("failed to fetch VM networks: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return result, fmt.Errorf("VM networks request failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &result)
+	if err != nil {
+		return result, fmt.Errorf("failed to parse VM networks response: %v", err)
 	}
 	return result, nil
 }
