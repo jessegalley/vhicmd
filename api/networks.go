@@ -144,20 +144,6 @@ func AttachNetworkToVM(networkURL, computeURL, token, vmID, networkID, portID, t
 	return result, nil
 }
 
-type PanelInterfaceRequest struct {
-	NetworkID string `json:"network_id"`
-	MacAddr   string `json:"mac_addr"`
-}
-
-type PanelInterfaceResponse struct {
-	ID                 string   `json:"id"`
-	NetworkID          string   `json:"network_id"`
-	SecurityGroups     []string `json:"security_groups"`
-	FixedIPs           []string `json:"fixed_ips"`
-	MacAddr            string   `json:"mac_addr"`
-	SpoofingProtection bool     `json:"spoofing_protection"`
-}
-
 // DetachNetworkFromVM detaches a network interface from a VM.
 func DetachNetworkFromVM(computeURL, token, vmID, portID string) error {
 	url := fmt.Sprintf("%s/servers/%s/os-interface/%s", computeURL, vmID, portID)
