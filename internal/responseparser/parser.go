@@ -107,7 +107,7 @@ type Image struct {
 func PrintImagesTable(images []Image) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{
-		"Name", "ID", "STATUS", "SIZE (Bytes)", "OWNER", "MinDisk", "MinRAM",
+		"Name", "ID", "STATUS", "SIZE (Bytes)", "MinDisk", "MinRAM",
 	})
 
 	applyTableStyle(table)
@@ -118,7 +118,6 @@ func PrintImagesTable(images []Image) {
 			i.ID,
 			colorStyleStatus(i.Status),
 			fmt.Sprintf("%d", i.Size),
-			i.Owner,
 			fmt.Sprintf("%d", i.MinDisk),
 			fmt.Sprintf("%d", i.MinRAM),
 		})
@@ -172,7 +171,7 @@ type Network struct {
 
 func PrintNetworksTable(nets []Network) {
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"NAME", "ID", "STATUS", "PROJECT", "MANAGED", "CIDRs"})
+	table.SetHeader([]string{"NAME", "ID", "STATUS", "MANAGED", "CIDRs"})
 
 	applyTableStyle(table)
 
@@ -181,7 +180,6 @@ func PrintNetworksTable(nets []Network) {
 			n.Name,
 			n.ID,
 			colorStyleStatus(n.Status),
-			n.Project,
 			colorStyleBool(n.PortSec),
 			n.CIDRs,
 		})
@@ -452,6 +450,118 @@ func PrintVMDetailsTable(details []VMDetails) {
 		}
 		metaTable.Render()
 	}
+}
+
+// -------------------------------------------------------------------
+// PORTS
+// -------------------------------------------------------------------
+
+type Port struct {
+	ID          string
+	MACAddress  string
+	NetworkID   string
+	DeviceID    string
+	DeviceOwner string
+	Status      string
+	FixedIPs    string
+}
+
+type PortDetails struct {
+	ID              string
+	MACAddress      string
+	NetworkID       string
+	DeviceID        string
+	DeviceOwner     string
+	Status          string
+	FixedIPs        []string
+	SecurityGroups  []string
+	AdminStateUp    bool
+	BindingHostID   string
+	BindingVnicType string
+	DNSDomain       string
+	DNSName         string
+	CreatedAt       string
+	UpdatedAt       string
+}
+
+func PrintPortDetailsTable(details PortDetails) {
+	ips := details.FixedIPs
+	if len(ips) == 0 {
+		ips = []string{"Unmanaged"}
+	} else {
+		for i, ip := range ips {
+			ips[i] = ip
+		}
+	}
+	fmt.Println("\nPort Info:")
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Field", "Value"})
+	applyTableStyle(table)
+
+	table.Append([]string{"ID", details.ID})
+	table.Append([]string{"MAC Address", color.Style{color.FgGreen}.Render(details.MACAddress)})
+	for _, ip := range ips {
+		if ip == "Unmanaged" {
+			table.Append([]string{"IP Address", color.Style{color.FgRed}.Render(ip)})
+		} else {
+			table.Append([]string{"IP Address", ip})
+		}
+	}
+	table.Append([]string{"Network ID", details.NetworkID})
+	table.Append([]string{"Attached VM", stringOrNA(details.DeviceID)})
+	table.Append([]string{"Device Owner", stringOrNA(details.DeviceOwner)})
+	table.Append([]string{"Status", colorStyleStatus(details.Status)})
+	table.Append([]string{"Admin State", colorStyleBool(details.AdminStateUp)})
+	table.Append([]string{"Binding Host", stringOrNA(details.BindingHostID)})
+	table.Append([]string{"VNIC Type", details.BindingVnicType})
+	table.Append([]string{"DNS Domain", stringOrNA(details.DNSDomain)})
+	table.Append([]string{"DNS Name", stringOrNA(details.DNSName)})
+	table.Append([]string{"Created", details.CreatedAt})
+	table.Append([]string{"Updated", stringOrNA(details.UpdatedAt)})
+	table.Render()
+
+	if len(details.FixedIPs) > 0 {
+		fmt.Println("\nFixed IPs:")
+		ipTable := tablewriter.NewWriter(os.Stdout)
+		ipTable.SetHeader([]string{"IP Address"})
+		applyTableStyle(ipTable)
+
+		for _, ip := range details.FixedIPs {
+			ipTable.Append([]string{ip})
+		}
+		ipTable.Render()
+	}
+
+	if len(details.SecurityGroups) > 0 {
+		fmt.Println("\nSecurity Groups:")
+		sgTable := tablewriter.NewWriter(os.Stdout)
+		sgTable.SetHeader([]string{"ID"})
+		applyTableStyle(sgTable)
+
+		for _, sg := range details.SecurityGroups {
+			sgTable.Append([]string{sg})
+		}
+		sgTable.Render()
+	}
+}
+
+func PrintPortsTable(ports []Port) {
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"ID", "MAC", "NETWORK", "DEVICE", "STATUS", "IPS"})
+
+	applyTableStyle(table)
+
+	for _, p := range ports {
+		table.Append([]string{
+			p.ID,
+			color.Style{color.FgGreen}.Render(p.MACAddress),
+			p.NetworkID,
+			stringOrNA(p.DeviceID),
+			colorStyleStatus(p.Status),
+			stringOrNA(p.FixedIPs),
+		})
+	}
+	table.Render()
 }
 
 // -------------------------------------------------------------------

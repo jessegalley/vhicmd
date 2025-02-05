@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 )
 
 // Image represents a virtual machine image.
@@ -143,4 +144,49 @@ func CreateAndUploadImage(computeURL, token string, req CreateImageRequest, data
 	}
 
 	return imageID, nil
+}
+
+// GetImageByName fetches the details of an image by its name.
+// The image names are not unique, so this function returns the first image if only one is found,
+// if multiple images or none are found, it returns an error.
+func GetImageIDByName(computeURL, token, imageName string) (string, error) {
+	images, err := ListImages(computeURL, token, nil)
+	if err != nil {
+		return "", err
+	}
+
+	foundImages := []Image{}
+	for _, image := range images.Images {
+		if strings.Contains(image.Name, imageName) {
+			foundImages = append(foundImages, image)
+		}
+	}
+
+	if len(foundImages) == 0 {
+		return "", fmt.Errorf("no images found for name %s", imageName)
+	}
+	if len(foundImages) > 1 {
+		return "", fmt.Errorf("multiple images found for name %s", imageName)
+	}
+
+	return foundImages[0].ID, nil
+}
+
+// GetImageNameByID fetches the name of an image by its ID.
+func GetImageNameByID(computeURL, token, imageID string) (string, error) {
+	images, err := ListImages(computeURL, token, nil)
+	if err != nil {
+		return "", err
+	}
+	imageName := ""
+	for _, image := range images.Images {
+		if image.ID == imageID {
+			imageName = image.Name
+			break
+		}
+	}
+	if imageName == "" {
+		return "", fmt.Errorf("no image found for ID %s", imageID)
+	}
+	return imageName, nil
 }

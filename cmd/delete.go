@@ -24,6 +24,11 @@ var deleteVMCmd = &cobra.Command{
 			return err
 		}
 
+		id, err := api.GetVMIDByName(computeURL, tok.Value, vmID)
+		if err == nil {
+			vmID = id
+		}
+
 		err = api.DeleteVM(computeURL, tok.Value, vmID)
 		if err != nil {
 			return err
@@ -45,6 +50,11 @@ var deleteImageCmd = &cobra.Command{
 		computeURL, err := validateTokenEndpoint(tok, "image")
 		if err != nil {
 			return err
+		}
+
+		img, err := api.GetImageIDByName(computeURL, tok.Value, imageID)
+		if err == nil {
+			imageID = img
 		}
 
 		err = api.DeleteImage(computeURL, tok.Value, imageID)
@@ -81,9 +91,33 @@ var deleteVolumeCmd = &cobra.Command{
 	},
 }
 
+var deletePortCmd = &cobra.Command{
+	Use:   "port <port_id>",
+	Short: "Delete a port",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		portID := args[0]
+
+		networkURL, err := validateTokenEndpoint(tok, "network")
+		if err != nil {
+			return err
+		}
+
+		err = api.DeletePort(networkURL, tok.Value, portID)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Port %s deleted\n", portID)
+
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(deleteCmd)
 	deleteCmd.AddCommand(deleteVMCmd)
 	deleteCmd.AddCommand(deleteImageCmd)
 	deleteCmd.AddCommand(deleteVolumeCmd)
+	deleteCmd.AddCommand(deletePortCmd)
 }

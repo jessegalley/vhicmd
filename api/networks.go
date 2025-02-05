@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // Network represents a single network object in the response.
@@ -100,8 +101,12 @@ func ListNetworks(baseURL, token string, queryParams map[string]string) (Network
 }
 
 // AttachNetworkToVM attaches a network interface to a VM with optional parameters.
-func AttachNetworkToVM(computeURL, token, vmID, networkID, portID, tag string, fixedIPs []string) (AttachNetworkResponse, error) {
+func AttachNetworkToVM(networkURL, computeURL, token, vmID, networkID, portID, tag string, fixedIPs []string) (AttachNetworkResponse, error) {
 	var result AttachNetworkResponse
+	id, err := GetNetworkIDByName(networkURL, token, networkID)
+	if err == nil {
+		networkID = id
+	}
 
 	url := fmt.Sprintf("%s/servers/%s/os-interface", computeURL, vmID)
 
@@ -115,6 +120,7 @@ func AttachNetworkToVM(computeURL, token, vmID, networkID, portID, tag string, f
 	if tag != "" {
 		request.InterfaceAttachment.Tag = tag
 	}
+
 	if len(fixedIPs) > 0 {
 		for _, ip := range fixedIPs {
 			request.InterfaceAttachment.FixedIPs = append(request.InterfaceAttachment.FixedIPs, IPInfo{IPAddress: ip})
@@ -136,6 +142,20 @@ func AttachNetworkToVM(computeURL, token, vmID, networkID, portID, tag string, f
 	}
 
 	return result, nil
+}
+
+type PanelInterfaceRequest struct {
+	NetworkID string `json:"network_id"`
+	MacAddr   string `json:"mac_addr"`
+}
+
+type PanelInterfaceResponse struct {
+	ID                 string   `json:"id"`
+	NetworkID          string   `json:"network_id"`
+	SecurityGroups     []string `json:"security_groups"`
+	FixedIPs           []string `json:"fixed_ips"`
+	MacAddr            string   `json:"mac_addr"`
+	SpoofingProtection bool     `json:"spoofing_protection"`
 }
 
 // DetachNetworkFromVM detaches a network interface from a VM.
@@ -177,4 +197,29 @@ func GetSubnetDetails(baseURL, token, subnetID string) (Subnet, error) {
 	}
 
 	return wrapper.Subnet, nil
+}
+
+// GetNetworkIDByName fetches the ID of a network by its name.
+func GetNetworkIDByName(baseURL, token, networkName string) (string, error) {
+	networks, err := ListNetworks(baseURL, token, nil)
+	if err != nil {
+		return "", err
+	}
+
+	foundNetworks := []Network{}
+	for _, network := range networks.Networks {
+		if strings.Contains(network.Name, networkName) {
+			foundNetworks = append(foundNetworks, network)
+		}
+	}
+
+	if len(foundNetworks) == 0 {
+		return "", fmt.Errorf("no network found for name %s", networkName)
+	}
+
+	if len(foundNetworks) > 1 {
+		return "", fmt.Errorf("multiple networks found for name %s", networkName)
+	}
+
+	return foundNetworks[0].ID, nil
 }

@@ -92,6 +92,7 @@ type VMDetail struct {
 	ID         string                      `json:"id"`
 	Name       string                      `json:"name"`
 	Status     string                      `json:"status"`
+	TenantID   string                      `json:"tenant_id"`
 	Host       string                      `json:"host,omitempty"`
 	PowerState int                         `json:"OS-EXT-STS:power_state"`
 	TaskState  string                      `json:"OS-EXT-STS:task_state"`
@@ -446,4 +447,39 @@ func DeleteVM(computeURL, token, vmID string) error {
 		return fmt.Errorf("failed to delete VM [%d]: %s", resp.ResponseCode, resp.Response)
 	}
 	return nil
+}
+
+// GetVMIDByName fetches the ID of a VM by its name.
+func GetVMIDByName(computeURL, token, vmName string) (string, error) {
+	vms, err := ListVMs(computeURL, token, nil)
+	if err != nil {
+		return "", err
+	}
+
+	var foundVMs []VM
+
+	for _, vm := range vms.Servers {
+		if strings.Contains(vm.Name, vmName) {
+			foundVMs = append(foundVMs, vm)
+		}
+	}
+
+	if len(foundVMs) == 0 {
+		return "", fmt.Errorf("no VMs found for name %s", vmName)
+	}
+
+	if len(foundVMs) > 1 {
+		return "", fmt.Errorf("multiple VMs found for name %s", vmName)
+	}
+
+	return foundVMs[0].ID, nil
+}
+
+// GetVMNameByID fetches the name of a VM by its ID.
+func GetVMNameByID(computeURL, token, vmID string) (string, error) {
+	vm, err := GetVMDetails(computeURL, token, vmID)
+	if err != nil {
+		return "", err
+	}
+	return vm.Name, nil
 }
