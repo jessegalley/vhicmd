@@ -8,59 +8,21 @@ import (
 
 // Port represents a Neutron port
 type Port struct {
-	AdminStateUp          bool                   `json:"admin_state_up,omitempty"`
-	AllowedAddressPairs   []AllowedAddressPair   `json:"allowed_address_pairs,omitempty"`
-	BindingHostID         string                 `json:"binding:host_id,omitempty"`
-	BindingProfile        map[string]interface{} `json:"binding:profile,omitempty"`
-	BindingVifDetails     map[string]interface{} `json:"binding:vif_details,omitempty"`
-	BindingVifType        string                 `json:"binding:vif_type,omitempty"`
-	BindingVnicType       string                 `json:"binding:vnic_type,omitempty"`
-	CreatedAt             string                 `json:"created_at,omitempty"`
-	DataPlaneStatus       string                 `json:"data_plane_status,omitempty"`
-	Description           string                 `json:"description,omitempty"`
-	DeviceID              string                 `json:"device_id,omitempty"`
-	DeviceOwner           string                 `json:"device_owner,omitempty"`
-	DNSAssignment         []DNSAssignment        `json:"dns_assignment,omitempty"`
-	DNSDomain             string                 `json:"dns_domain,omitempty"`
-	DNSName               string                 `json:"dns_name,omitempty"`
-	ExtraDHCPOpts         []ExtraDHCPOpt         `json:"extra_dhcp_opts,omitempty"`
-	FixedIPs              []IPInfo               `json:"fixed_ips,omitempty"`
-	ID                    string                 `json:"id,omitempty"`
-	IPAllocation          string                 `json:"ip_allocation,omitempty"`
-	MACAddress            string                 `json:"mac_address,omitempty"`
-	Name                  string                 `json:"name,omitempty"`
-	NetworkID             string                 `json:"network_id"`
-	NumaAffinityPolicy    string                 `json:"numa_affinity_policy,omitempty"`
-	PortSecurityEnabled   *bool                  `json:"port_security_enabled,omitempty"`
-	ProjectID             string                 `json:"project_id,omitempty"`
-	QoSNetworkPolicyID    string                 `json:"qos_network_policy_id,omitempty"`
-	QoSPolicyID           string                 `json:"qos_policy_id,omitempty"`
-	RevisionNumber        int                    `json:"revision_number,omitempty"`
-	SecurityGroups        []string               `json:"security_groups,omitempty"`
-	Status                string                 `json:"status,omitempty"`
-	Tags                  []string               `json:"tags,omitempty"`
-	TenantID              string                 `json:"tenant_id,omitempty"`
-	UpdatedAt             string                 `json:"updated_at,omitempty"`
-	PropagateUplinkStatus bool                   `json:"propagate_uplink_status,omitempty"`
-	MacLearningEnabled    *bool                  `json:"mac_learning_enabled,omitempty"`
-	PortTrustedVif        *bool                  `json:"port_trusted_vif,omitempty"`
-}
-
-type AllowedAddressPair struct {
-	IPAddress  string `json:"ip_address"`
-	MACAddress string `json:"mac_address,omitempty"`
-}
-
-type DNSAssignment struct {
-	Hostname  string `json:"hostname"`
-	IPAddress string `json:"ip_address"`
-	FQDN      string `json:"fqdn"`
-}
-
-type ExtraDHCPOpt struct {
-	OptValue  string `json:"opt_value"`
-	IPVersion int    `json:"ip_version,omitempty"`
-	OptName   string `json:"opt_name"`
+	AdminStateUp    bool     `json:"admin_state_up,omitempty"`
+	BindingHostID   string   `json:"binding:host_id,omitempty"`
+	BindingVnicType string   `json:"binding:vnic_type,omitempty"`
+	CreatedAt       string   `json:"created_at,omitempty"`
+	DeviceID        string   `json:"device_id,omitempty"`
+	DeviceOwner     string   `json:"device_owner,omitempty"`
+	DNSDomain       string   `json:"dns_domain,omitempty"`
+	DNSName         string   `json:"dns_name,omitempty"`
+	FixedIPs        []IPInfo `json:"fixed_ips,omitempty"`
+	ID              string   `json:"id,omitempty"`
+	MACAddress      string   `json:"mac_address,omitempty"`
+	NetworkID       string   `json:"network_id"`
+	SecurityGroups  []string `json:"security_groups,omitempty"`
+	Status          string   `json:"status,omitempty"`
+	UpdatedAt       string   `json:"updated_at,omitempty"`
 }
 
 // PortCreateRequest represents the request body for port creation

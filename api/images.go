@@ -10,22 +10,13 @@ import (
 
 // Image represents a virtual machine image.
 type Image struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Status        string   `json:"status"`
-	Visibility    string   `json:"visibility"`
-	CreatedAt     string   `json:"created_at"`
-	UpdatedAt     string   `json:"updated_at"`
-	Size          int64    `json:"size"`
-	MinDisk       int      `json:"min_disk"`
-	MinRAM        int      `json:"min_ram"`
-	Owner         string   `json:"owner"`
-	ContainerFmt  string   `json:"container_format"`
-	DiskFmt       string   `json:"disk_format"`
-	Tags          []string `json:"tags"`
-	Protected     bool     `json:"protected"`
-	DirectURL     string   `json:"direct_url,omitempty"`
-	TraitRequired string   `json:"trait:CUSTOM_HCI_122E856B9E9C4D80A0F8C21591B5AFCB,omitempty"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Size    int64  `json:"size"`
+	MinDisk int    `json:"min_disk"`
+	MinRAM  int    `json:"min_ram"`
+	Owner   string `json:"owner"`
 }
 
 type CreateImageRequest struct {
@@ -189,4 +180,27 @@ func GetImageNameByID(computeURL, token, imageID string) (string, error) {
 		return "", fmt.Errorf("no image found for ID %s", imageID)
 	}
 	return imageName, nil
+}
+
+// GetImageByID fetches the details of an image by its ID.
+func GetImageByID(computeURL, token, imageID string) (Image, error) {
+	images, err := ListImages(computeURL, token, nil)
+	if err != nil {
+		return Image{}, err
+	}
+	for _, image := range images.Images {
+		if image.ID == imageID {
+			return image, nil
+		}
+	}
+	return Image{}, fmt.Errorf("no image found for ID %s", imageID)
+}
+
+// GetImageSize fetches the size of an image by its ID.
+func GetImageSize(computeURL, token, imageID string) (int64, error) {
+	image, err := GetImageByID(computeURL, token, imageID)
+	if err != nil {
+		return 0, err
+	}
+	return image.Size, nil
 }

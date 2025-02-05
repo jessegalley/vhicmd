@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"syscall"
 
@@ -15,31 +16,31 @@ import (
 )
 
 type progressReader struct {
-    reader     io.Reader
-    total      int64
-    downloaded int64
+	reader     io.Reader
+	total      int64
+	downloaded int64
 }
 
 func newProgressReader(reader io.Reader, total int64) *progressReader {
-    return &progressReader{
-        reader: reader,
-        total:  total,
-    }
+	return &progressReader{
+		reader: reader,
+		total:  total,
+	}
 }
 
 func (pr *progressReader) Read(p []byte) (int, error) {
-    n, err := pr.reader.Read(p)
-    pr.downloaded += int64(n)
+	n, err := pr.reader.Read(p)
+	pr.downloaded += int64(n)
 
-    // Calculate percentage
-    percent := float64(pr.downloaded) * 100 / float64(pr.total)
-    fmt.Printf("\rUploading: %.2f%% (%d/%d MB)", percent, pr.downloaded/1024/1024, pr.total/1024/1024)
+	// Calculate percentage
+	percent := float64(pr.downloaded) * 100 / float64(pr.total)
+	fmt.Printf("\rUploading: %.2f%% (%d/%d MB)", percent, pr.downloaded/1024/1024, pr.total/1024/1024)
 
-    if err == io.EOF {
-        fmt.Println() // New line on completion
-    }
+	if err == io.EOF {
+		fmt.Println() // New line on completion
+	}
 
-    return n, err
+	return n, err
 }
 
 // readUsernameFromStdin() prompts the user for a username
@@ -169,4 +170,14 @@ func readAndEncodeUserData(path string) (string, error) {
 		return "", fmt.Errorf("failed to read user data file: %v", err)
 	}
 	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+func validateMacAddr(mac string) error {
+	if mac == "" || mac == "auto" {
+		return nil
+	}
+	if _, err := net.ParseMAC(mac); err != nil {
+		return fmt.Errorf("invalid MAC address: %v", err)
+	}
+	return nil
 }

@@ -14,14 +14,10 @@ type CreateVMRequest struct {
 		FlavorRef string `json:"flavorRef"`
 		ImageRef  string `json:"imageRef,omitempty"`
 		//Networks             []map[string]string      `json:"networks"`
-		Networks             string                   `json:"networks"`
+		Networks             string                   `json:"networks"` // for special "none" case
 		BlockDeviceMappingV2 []map[string]interface{} `json:"block_device_mapping_v2,omitempty"`
-		KeyName              string                   `json:"key_name,omitempty"`
-		AdminPass            string                   `json:"adminPass,omitempty"`
 		Metadata             map[string]string        `json:"metadata,omitempty"`
 		UserData             string                   `json:"user_data,omitempty"`
-		AvailabilityZone     string                   `json:"availability_zone,omitempty"`
-		OSDCF                string                   `json:"OS-DCF:diskConfig,omitempty"`
 	} `json:"server"`
 }
 
@@ -60,49 +56,27 @@ func (i *ImageField) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, &i.ServerImage)
 }
 
-// NetworkAddress represents a single network interface address
-type NetworkAddress struct {
-	OSEXTIPSMACAddr string `json:"OS-EXT-IPS-MAC:mac_addr"`
-	Version         int    `json:"version"`
-	Addr            string `json:"addr,omitempty"`
-	OSEXTIPSType    string `json:"OS-EXT-IPS:type,omitempty"`
-	NetworkUUID     string // (Populated from parent network info if needed)
-}
-
 // Basic VM struct used by List operation
 type VM struct {
-	ID         string                      `json:"id"`
-	Name       string                      `json:"name"`
-	Status     string                      `json:"status"`
-	PowerState int                         `json:"OS-EXT-STS:power_state"`
-	TaskState  string                      `json:"OS-EXT-STS:task_state"`
-	Addresses  map[string][]NetworkAddress `json:"addresses"`
-	Created    string                      `json:"created"`
-	Updated    string                      `json:"updated,omitempty"`
-	Progress   int                         `json:"progress,omitempty"`
-	VMState    string                      `json:"OS-EXT-STS:vm_state"`
-	Image      ImageField                  `json:"image"`
-	Flavor     struct {
-		ID string `json:"id"`
-	} `json:"flavor"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // Detailed VM struct used by Get operation
 type VMDetail struct {
-	ID         string                      `json:"id"`
-	Name       string                      `json:"name"`
-	Status     string                      `json:"status"`
-	TenantID   string                      `json:"tenant_id"`
-	Host       string                      `json:"host,omitempty"`
-	PowerState int                         `json:"OS-EXT-STS:power_state"`
-	TaskState  string                      `json:"OS-EXT-STS:task_state"`
-	Addresses  map[string][]NetworkAddress `json:"addresses"`
-	Created    string                      `json:"created"`
-	Updated    string                      `json:"updated,omitempty"`
-	Progress   int                         `json:"progress,omitempty"`
-	VMState    string                      `json:"OS-EXT-STS:vm_state"`
-	Image      ImageField                  `json:"image"`
-	Flavor     struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	//	TenantID   string     `json:"tenant_id"`
+	//	Host       string     `json:"host,omitempty"`
+	PowerState int    `json:"OS-EXT-STS:power_state"`
+	TaskState  string `json:"OS-EXT-STS:task_state"`
+	Created    string `json:"created"`
+	Updated    string `json:"updated,omitempty"`
+	//	Progress   int        `json:"progress,omitempty"`
+	//	VMState    string     `json:"OS-EXT-STS:vm_state"`
+	Image  ImageField `json:"image"`
+	Flavor struct {
 		ID           string            `json:"id"`
 		Ephemeral    int               `json:"ephemeral"`
 		RAM          int               `json:"ram"`
@@ -114,7 +88,7 @@ type VMDetail struct {
 	} `json:"flavor"`
 	SecurityGroups                   []SecurityGroup   `json:"security_groups"`
 	HCIInfo                          HCIInfo           `json:"hci_info"`
-	OSExtendedVolumesVolumesAttached []Volume          `json:"os-extended-volumes:volumes_attached"`
+	OSExtendedVolumesVolumesAttached []VmVolume        `json:"os-extended-volumes:volumes_attached"`
 	Metadata                         map[string]string `json:"metadata,omitempty"`
 }
 
@@ -135,7 +109,7 @@ type SecurityGroupRule struct {
 	EtherType      string `json:"ethertype"`
 }
 
-type Volume struct {
+type VmVolume struct {
 	ID                  string `json:"id"`
 	DeleteOnTermination bool   `json:"delete_on_termination"`
 }
@@ -162,7 +136,6 @@ type VMNetworkListResponse struct {
 		PortID  string `json:"port_id"`
 		NetID   string `json:"net_id"`
 		MacAddr string `json:"mac_addr"`
-		Tag     string `json:"tag,omitempty"`
 	} `json:"interfaceAttachments"`
 }
 
@@ -270,6 +243,7 @@ func CreateVM(computeURL, token string, request CreateVMRequest) (CreateVMRespon
 	return result, nil
 }
 
+// GetVMNetworks fetches the list of networks attached to a VM.
 func GetVMNetworks(computeURL, token, vmID string) (VMNetworkListResponse, error) {
 	var result VMNetworkListResponse
 

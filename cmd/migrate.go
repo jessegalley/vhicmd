@@ -11,6 +11,19 @@ import (
 	"github.com/spf13/viper"
 )
 
+// =========================
+// USAGE EXPLANATIONS
+// =========================
+// On a host with access to the VHI API as well as the VMDK stores mounted,
+// the 'migrate vm' command can be used to migrate a VM from a VMDK image.
+// The VMDK image is uploaded to the VHI API as a temporary image, then a VM
+// is created with the image as the root volume. The VM is then attached to
+// the specified networks with the specified MAC addresses.
+//
+// TO PREVENT COLLISIONS:
+// Ensure the vSphere VM is powered off before migration, or use the --shutdown
+// flag to shut down the VM after migration.
+
 // 'migrate' parent command
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
@@ -26,8 +39,8 @@ var migrateVMCmd = &cobra.Command{
     --name MyVM \
     --vmdk /path/to/disk.vmdk \
     --flavor myflavor \
-    --networks netA,netB \
-    --mac aa:aa:aa:aa:aa:aa,bb:bb:bb:bb:bb:bb \
+    --networks netA,netB,netC \
+    --mac auto,bb:bb:bb:bb:bb:bb,auto \
     --size 20 \
     --shutdown`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -51,6 +64,11 @@ var migrateVMCmd = &cobra.Command{
 			return fmt.Errorf("must provide --vmdk /path/to/image for migration")
 		}
 
+		// validate disk bus
+		if migrateFlagDiskBus != "sata" && migrateFlagDiskBus != "scsi" && migrateFlagDiskBus != "virtio" {
+			return fmt.Errorf("disk bus must be one of: sata, scsi, virtio")
+		}
+
 		flavorRef := migrateFlagFlavorRef
 		if flavorRef == "" {
 			flavorRef = viper.GetString("flavor_id")
@@ -66,11 +84,17 @@ var migrateVMCmd = &cobra.Command{
 		if networks == "" {
 			return fmt.Errorf("no networks specified; provide --networks or set 'networks' in config")
 		}
+
 		macs := migrateFlagMacAddrCSV
 		networkIDs := strings.Split(networks, ",")
 		macAddresses := strings.Split(macs, ",")
 		if len(networkIDs) != len(macAddresses) {
 			return fmt.Errorf("the number of networks must match the number of MAC addresses")
+		}
+		for _, mac := range macAddresses {
+			if err := validateMacAddr(mac); err != nil {
+				return fmt.Errorf("invalid MAC address: %s", err)
+			}
 		}
 
 		fid, err := api.GetFlavorIDByName(computeURL, tok.Value, flavorRef)
@@ -80,19 +104,19 @@ var migrateVMCmd = &cobra.Command{
 
 		fmt.Printf("Creating temporary image for VM '%s'...\n", migrateFlagVMName)
 
-		f, err := os.Open(migrateFlagVMDKPath)
+		file, err := os.Open(migrateFlagVMDKPath)
 		if err != nil {
 			return fmt.Errorf("failed to open image file: %v", err)
 		}
-		defer f.Close()
+		defer file.Close()
 
-		info, err := f.Stat()
+		info, err := file.Stat()
 		if err != nil {
-			return fmt.Errorf("failed to stat image file: %v", err)
+			return fmt.Errorf("failed to stat file: %v", err)
 		}
-		fileSize := info.Size()
 
-		progressReader := newProgressReader(f, fileSize)
+		fmt.Printf("Starting upload of %s (%d MB)\n", migrateFlagVMDKPath, info.Size()/1024/1024)
+		progressReader := newProgressReader(file, info.Size())
 
 		imgReq := api.CreateImageRequest{
 			Name:         fmt.Sprintf("Migrated-%s", migrateFlagVMName),
@@ -105,12 +129,21 @@ var migrateVMCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to create/upload image: %v", err)
 		}
-		fmt.Printf("\nImage created: %s\n", imageID)
 
-		volumeSize := migrateFlagVMSize
-		if volumeSize <= 0 {
-			volumeSize = 10 // default
+		imageSize, err := api.GetImageSize(imageURL, tok.Value, imageID)
+		if err != nil {
+			return fmt.Errorf("failed to get image size: %v", err)
 		}
+
+		imageSizeGB := int64(0)
+		if migrateFlagVMSize == 0 {
+			// round up to the nearest GB
+			imageSizeGB = (imageSize + 1024*1024*1024 - 1) / (1024 * 1024 * 1024)
+		} else {
+			imageSizeGB = migrateFlagVMSize
+		}
+
+		fmt.Printf("\nImage created: %s\n", imageID)
 
 		vmReq := api.CreateVMRequest{}
 		vmReq.Server.Name = migrateFlagVMName
@@ -121,18 +154,17 @@ var migrateVMCmd = &cobra.Command{
 		// Force SATA block device
 		// NOTE: This is a bit of a hack to force the use of SATA for the root volume
 		// so udev in the VM uses /dev/sda instead of /dev/vda, as with VMWare.
-		vmReq.Server.BlockDeviceMappingV2 = []map[string]interface{}{
-			{
-				"boot_index":            0,
-				"uuid":                  imageID,
-				"source_type":           "image",
-				"destination_type":      "volume",
-				"volume_size":           volumeSize,
-				"delete_on_termination": true,
-				"disk_bus":              "sata",
-				"volume_type":           "nvme_ec7_2",
-			},
+		mapping := map[string]interface{}{
+			"boot_index":            0,
+			"uuid":                  imageID,
+			"source_type":           "image",
+			"destination_type":      "volume",
+			"volume_size":           imageSizeGB,
+			"delete_on_termination": true,
+			"disk_bus":              migrateFlagDiskBus,
+			"volume_type":           "nvme_ec7_2",
 		}
+		vmReq.Server.BlockDeviceMappingV2 = []map[string]interface{}{mapping}
 
 		fmt.Printf("Creating VM '%s'...\n", migrateFlagVMName)
 		vmResp, err := api.CreateVM(computeURL, tok.Value, vmReq)
@@ -151,6 +183,11 @@ var migrateVMCmd = &cobra.Command{
 			netNameOrID = strings.TrimSpace(netNameOrID)
 			macAddr := strings.TrimSpace(macAddresses[i])
 
+			// If the user specified "auto", then omit the mac_addr field by setting it to empty.
+			if strings.ToLower(macAddr) == "auto" {
+				macAddr = ""
+			}
+
 			// Try to resolve network name->ID
 			netID, err := api.GetNetworkIDByName(networkURL, tok.Value, netNameOrID)
 			if err == nil && netID != "" {
@@ -160,21 +197,22 @@ var migrateVMCmd = &cobra.Command{
 			fmt.Printf("Attaching network '%s' to VM '%s' with MAC '%s'...\n",
 				netNameOrID, vmDetails.ID, macAddr)
 
-			// Create an unmanaged port with the custom MAC
+			// Create a port, using the MAC address for unmanaged networks
 			portResp, err := api.CreatePort(networkURL, tok.Value, netNameOrID, macAddr)
 			if err != nil {
 				return fmt.Errorf("failed to create port on network %s: %v", netNameOrID, err)
 			}
 
-			// Attach the port to the VM
-			_, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, vmDetails.ID, "", portResp.Port.ID, "", nil)
+			// Attach the port to the VM (unchanged)
+			_, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, vmDetails.ID, "", portResp.Port.ID, nil)
 			if err != nil {
 				return fmt.Errorf("failed to attach port '%s' to VM '%s': %v", portResp.Port.ID, vmDetails.ID, err)
 			}
 
+			// Optionally, add the network info to your summary.
 			netInfo = append(netInfo, map[string]interface{}{
 				"network_id":  netNameOrID,
-				"mac_address": macAddr,
+				"mac_address": portResp.Port.MACAddress,
 			})
 		}
 
@@ -214,7 +252,8 @@ var (
 	migrateFlagFlavorRef  string
 	migrateFlagNetworkCSV string
 	migrateFlagMacAddrCSV string
-	migrateFlagVMSize     int
+	migrateFlagVMSize     int64
+	migrateFlagDiskBus    string
 	migrateFlagShutdown   bool
 )
 
@@ -224,8 +263,9 @@ func init() {
 	migrateVMCmd.Flags().StringVar(&migrateFlagFlavorRef, "flavor", "", "Flavor name or ID")
 	migrateVMCmd.Flags().StringVar(&migrateFlagNetworkCSV, "networks", "", "Comma-separated network names/IDs")
 	migrateVMCmd.Flags().StringVar(&migrateFlagMacAddrCSV, "mac", "", "Comma-separated MAC addresses (one per network)")
-	migrateVMCmd.Flags().IntVar(&migrateFlagVMSize, "size", 10, "Size of the root volume in GB if extending the image")
-	migrateVMCmd.Flags().BoolVar(&migrateFlagShutdown, "shutdown", false, "Shut down the VM after creation")
+	migrateVMCmd.Flags().Int64Var(&migrateFlagVMSize, "size", 0, "Optional: size in GB if extending the image")
+	migrateVMCmd.Flags().StringVar(&migrateFlagDiskBus, "disk-bus", "scsi", "Disk bus for the root volume, default: scsi")
+	migrateVMCmd.Flags().BoolVar(&migrateFlagShutdown, "shutdown", false, "Shut down the new VM after creation")
 
 	migrateCmd.AddCommand(migrateVMCmd)
 

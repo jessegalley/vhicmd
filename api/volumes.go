@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// VolumeStruct represents a block storage volume.
-type VolumeStruct struct {
+// Volume represents a block storage volume.
+type Volume struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Size        int    `json:"size"`
@@ -17,7 +17,7 @@ type VolumeStruct struct {
 
 // VolumeListResponse represents the response for listing volumes.
 type VolumeListResponse struct {
-	Volumes []VolumeStruct `json:"volumes"`
+	Volumes []Volume `json:"volumes"`
 }
 
 // CreateVolumeRequest represents the payload for creating a volume.
@@ -33,7 +33,7 @@ type CreateVolumeRequest struct {
 
 // CreateVolumeResponse represents the response after creating a volume.
 type CreateVolumeResponse struct {
-	Volume VolumeStruct `json:"volume"`
+	Volume Volume `json:"volume"`
 }
 
 type SetBootableRequest struct {

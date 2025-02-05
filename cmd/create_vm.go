@@ -251,18 +251,18 @@ var createVMCmd = &cobra.Command{
 					return fmt.Errorf("failed to create port for network %s: %v", networkID, err)
 				}
 				// Attach the port to the VM
-				interfaceResp, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, resp.Server.ID, "", portResp.Port.ID, "", nil)
+				interfaceResp, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, resp.Server.ID, "", portResp.Port.ID, nil)
 				if err != nil {
 					return fmt.Errorf("failed to attach network %s with MAC %s: %v", networkID, macAddresses[i], err)
 				}
 			} else {
 				// Call API to attach the network interface
-				interfaceResp, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, resp.Server.ID, networkID, "", "", fixedIPs)
+				interfaceResp, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, resp.Server.ID, networkID, "", fixedIPs)
 				if err != nil {
 					fmt.Printf("Failed to attach network with ip %s, retrying as unmanaged iface\n", ip)
 
 					// Retry without fixed IP (unmanaged interface)
-					interfaceResp, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, resp.Server.ID, networkID, "", "", nil)
+					interfaceResp, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, resp.Server.ID, networkID, "", nil)
 					if err != nil {
 						return fmt.Errorf("Failed to attach network %s even without fixed IP\n", networkID)
 					}

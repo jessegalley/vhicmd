@@ -2,7 +2,9 @@ package config
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -19,17 +21,43 @@ type Config struct {
 }
 
 func InitConfig(cfgFile string) (*viper.Viper, error) {
+
 	v := viper.New()
 
 	if cfgFile != "" {
-		v.SetConfigFile(cfgFile)
-	} else {
-		home, err := os.UserHomeDir()
+        v.SetConfigFile(cfgFile)
+        v.SetConfigType("yaml")
+    } else {
+        // Get original user's home directory via SUDO_USER env var
+        var home string
+        if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+            out, err := exec.Command("getent", "passwd", sudoUser).Output()
+            if err == nil {
+                home = strings.Split(string(out), ":")[5]
+            }
+        }
+
+        // Fallback to regular UserHomeDir if not running with sudo
+        if home == "" {
+            var err error
+            home, err = os.UserHomeDir()
+            if err != nil {
+                return nil, err
+            }
+        }
+
+        v.SetConfigFile(filepath.Join(home, ".vhirc"))
+        v.SetConfigType("yaml")
+    }
+
+	// touch the file if it doesn't exist, chmod 600
+	if _, err := os.Stat(v.ConfigFileUsed()); os.IsNotExist(err) {
+		f, err := os.Create(v.ConfigFileUsed())
 		if err != nil {
 			return nil, err
 		}
-		v.SetConfigFile(filepath.Join(home, ".vhirc"))
-		v.SetConfigType("yaml")
+		f.Chmod(0600)
+		f.Close()
 	}
 
 	// Environment
@@ -44,40 +72,4 @@ func InitConfig(cfgFile string) (*viper.Viper, error) {
 	}
 
 	return v, nil
-}
-
-func LoadConfig() (*Config, error) {
-	v, err := InitConfig("")
-	if err != nil {
-		return nil, err
-	}
-
-	var config Config
-	if err := v.Unmarshal(&config); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
-}
-
-func SaveConfig(config *Config) error {
-	v := viper.New()
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	configPath := filepath.Join(home, ".vhirc")
-	v.SetConfigFile(configPath)
-
-	v.Set("host", config.Host)
-	v.Set("username", config.Username)
-	v.Set("password", config.Password)
-	v.Set("domain", config.Domain)
-	v.Set("project", config.Project)
-	v.Set("networks", config.Networks)
-	v.Set("flavor_id", config.FlavorID)
-	v.Set("image_id", config.ImageID)
-
-	return v.WriteConfig()
 }
