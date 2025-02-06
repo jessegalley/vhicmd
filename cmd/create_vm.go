@@ -154,7 +154,7 @@ var createVMCmd = &cobra.Command{
 					"volume_size":           volumeSize,
 					"delete_on_termination": true,
 					"volume_type":           "nvme_ec7_2",
-					"disk_bus":              "sata",
+					"disk_bus":              "scsi",
 				},
 			}
 			// cloud-init script

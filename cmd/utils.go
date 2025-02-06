@@ -5,43 +5,19 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
 	"syscall"
 
+	"github.com/facette/natsort"
 	"github.com/jessegalley/vhicmd/api"
 	"golang.org/x/term"
 )
-
-type progressReader struct {
-	reader     io.Reader
-	total      int64
-	downloaded int64
-}
-
-func newProgressReader(reader io.Reader, total int64) *progressReader {
-	return &progressReader{
-		reader: reader,
-		total:  total,
-	}
-}
-
-func (pr *progressReader) Read(p []byte) (int, error) {
-	n, err := pr.reader.Read(p)
-	pr.downloaded += int64(n)
-
-	// Calculate percentage
-	percent := float64(pr.downloaded) * 100 / float64(pr.total)
-	fmt.Printf("\rUploading: %.2f%% (%d/%d MB)", percent, pr.downloaded/1024/1024, pr.total/1024/1024)
-
-	if err == io.EOF {
-		fmt.Println() // New line on completion
-	}
-
-	return n, err
-}
 
 // readUsernameFromStdin() prompts the user for a username
 // on stdout and then reads in and returns what they enter
@@ -180,4 +156,77 @@ func validateMacAddr(mac string) error {
 		return fmt.Errorf("invalid MAC address: %v", err)
 	}
 	return nil
+}
+
+// findVMDKsParallel launches one goroutine per datastore in /mnt/vmdk
+func findVMDKsParallel(pattern string) ([]string, error) {
+	rootDir := "/mnt/vmdk"
+	var matches []string
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	entries, err := os.ReadDir(rootDir) // Get all top-level directories (datastores)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory %s: %v", rootDir, err)
+	}
+
+	// Channel for collecting results
+	results := make(chan string, 1000) // Buffered to prevent blocking
+
+	// Start searching each datastore in its own goroutine
+	for _, entry := range entries {
+		if entry.IsDir() {
+			wg.Add(1)
+			go func(datastore string) {
+				defer wg.Done()
+				storePath := filepath.Join(rootDir, datastore)
+				storeMatches := findVMDKsInPath(storePath, pattern)
+
+				// Lock before appending to shared slice
+				mu.Lock()
+				matches = append(matches, storeMatches...)
+				mu.Unlock()
+
+				// Send matches to channel (optional)
+				for _, match := range storeMatches {
+					results <- match
+				}
+			}(entry.Name())
+		}
+	}
+
+	// Close channel when all goroutines are done
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	wg.Wait()
+
+	// Sort matches using natural sorting
+	sort.Slice(matches, func(i, j int) bool {
+		return natsort.Compare(strings.ToLower(matches[i]), strings.ToLower(matches[j]))
+	})
+
+	return matches, nil
+}
+
+// findVMDKsInPath recursively searches a specific datastore path
+func findVMDKsInPath(rootPath, pattern string) []string {
+	var matches []string
+	filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			fmt.Printf("Warning: Cannot access %s: %v\n", path, err)
+			return nil
+		}
+
+		if !d.IsDir() && strings.HasSuffix(d.Name(), "-flat.vmdk") {
+			baseName := strings.TrimSuffix(d.Name(), "-flat.vmdk")
+			if strings.Contains(strings.ToLower(baseName), strings.ToLower(pattern)) {
+				matches = append(matches, path)
+			}
+		}
+		return nil
+	})
+	return matches
 }

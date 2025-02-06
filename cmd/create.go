@@ -70,14 +70,13 @@ var createImageCmd = &cobra.Command{
 			name = fmt.Sprintf("%s-%s", filepath.Base(flagImageFile), time.Now().Format("20060102-150405"))
 		}
 
-		// Get file size for progress
+		// Get file size for progress display
 		info, err := file.Stat()
 		if err != nil {
 			return fmt.Errorf("failed to stat file: %v", err)
 		}
 
 		fmt.Printf("Starting upload of %s (%d MB)\n", flagImageFile, info.Size()/1024/1024)
-		progressReader := newProgressReader(file, info.Size())
 
 		req := api.CreateImageRequest{
 			Name:         name,
@@ -86,12 +85,12 @@ var createImageCmd = &cobra.Command{
 			Visibility:   "shared",
 		}
 
-		imageID, err := api.CreateAndUploadImage(imageURL, tok.Value, req, progressReader)
+		imageID, err := api.CreateAndUploadImage(imageURL, tok.Value, req, file)
 		if err != nil {
 			return fmt.Errorf("failed to create/upload image: %v", err)
 		}
 
-		fmt.Printf("\nImage created: ID: %s, Name: %s\n", imageID, name)
+		fmt.Printf("Image created: ID: %s, Name: %s\n", imageID, name)
 		return nil
 	},
 }

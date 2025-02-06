@@ -94,7 +94,7 @@ func callDELETE(url, token string) (ApiResponse, error) {
 func callBigPUT(url, token string, data io.Reader) (ApiResponse, error) {
 	apiResp := ApiResponse{}
 
-	resp, err := httpclient.SendLargePutRequest(url, token, data)
+	resp, err := httpclient.UploadBigFile(url, token, data)
 	if err != nil {
 		return apiResp, fmt.Errorf("error making HTTP PUT request: %v", err)
 	}

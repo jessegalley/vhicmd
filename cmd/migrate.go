@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/jessegalley/vhicmd/api"
 	"github.com/spf13/cobra"
@@ -116,7 +117,6 @@ var migrateVMCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Starting upload of %s (%d MB)\n", migrateFlagVMDKPath, info.Size()/1024/1024)
-		progressReader := newProgressReader(file, info.Size())
 
 		imgReq := api.CreateImageRequest{
 			Name:         fmt.Sprintf("Migrated-%s", migrateFlagVMName),
@@ -125,7 +125,7 @@ var migrateVMCmd = &cobra.Command{
 			Visibility:   "shared",
 		}
 
-		imageID, err := api.CreateAndUploadImage(imageURL, tok.Value, imgReq, progressReader)
+		imageID, err := api.CreateAndUploadImage(imageURL, tok.Value, imgReq, file)
 		if err != nil {
 			return fmt.Errorf("failed to create/upload image: %v", err)
 		}
@@ -216,6 +216,9 @@ var migrateVMCmd = &cobra.Command{
 			})
 		}
 
+		// -- Not very reliable if the VM is hung since
+		// this only sends a soft os-stop signal, it takes
+		// ~5 minutes if acpid is not running in the VM.
 		if migrateFlagShutdown {
 			fmt.Printf("Shutting down VM '%s'...\n", vmDetails.ID)
 			if err := api.StopVM(computeURL, tok.Value, vmDetails.ID); err != nil {
@@ -245,6 +248,40 @@ var migrateVMCmd = &cobra.Command{
 	},
 }
 
+// migrateFindCmd is the 'migrate find' subcommand
+var migrateFindCmd = &cobra.Command{
+	Use:   "find <pattern>",
+	Short: "Find a VMDK file matching the pattern in /mnt/vmdk",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		pattern := args[0]
+
+		fmt.Printf("Searching for VMDK files matching '%s' in /mnt/vmdk...\n", pattern)
+		start := time.Now()
+
+		matches, err := findVMDKsParallel(pattern)
+		duration := time.Since(start)
+
+		fmt.Printf("\nSearch completed in %s\n", duration)
+
+		if err != nil {
+			return err
+		}
+
+		if len(matches) == 0 {
+			fmt.Println("No matching VMDK files found.")
+			return nil
+		}
+
+		fmt.Println("\nMatching VMDK files:")
+		for _, match := range matches {
+			fmt.Println(match)
+		}
+
+		return nil
+	},
+}
+
 // Flags for migrate vm
 var (
 	migrateFlagVMName     string
@@ -268,6 +305,7 @@ func init() {
 	migrateVMCmd.Flags().BoolVar(&migrateFlagShutdown, "shutdown", false, "Shut down the new VM after creation")
 
 	migrateCmd.AddCommand(migrateVMCmd)
+	migrateCmd.AddCommand(migrateFindCmd)
 
 	rootCmd.AddCommand(migrateCmd)
 }

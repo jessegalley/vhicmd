@@ -6,6 +6,9 @@ import (
 	"io"
 	"net/url"
 	"strings"
+
+	"github.com/jessegalley/vhicmd/internal/httpclient"
+	"github.com/spf13/viper"
 )
 
 // Image represents a virtual machine image.
@@ -110,13 +113,20 @@ func createImage(computeURL, token string, req CreateImageRequest) (string, erro
 // UploadImageData uploads the actual image data
 func uploadImageData(computeURL, token, imageID string, data io.Reader) error {
 	url := fmt.Sprintf("%s/v2/images/%s/file", computeURL, imageID)
-	apiResp, err := callBigPUT(url, token, data)
+
+	if viper.GetBool("debug") {
+		fmt.Printf("Attempting upload to URL: %s\n", url)
+	}
+
+	resp, err := httpclient.UploadBigFile(url, token, data)
 	if err != nil {
 		return fmt.Errorf("upload failed: %v", err)
 	}
+	defer resp.Body.Close()
 
-	if apiResp.ResponseCode != 204 {
-		return fmt.Errorf("upload failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	if resp.StatusCode != 204 && resp.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload failed [%d]: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	return nil
@@ -124,13 +134,24 @@ func uploadImageData(computeURL, token, imageID string, data io.Reader) error {
 
 // CreateAndUploadImage creates an image and uploads the image data
 func CreateAndUploadImage(computeURL, token string, req CreateImageRequest, data io.Reader) (string, error) {
+	// Create image with disk_format and container_format specified
+	if req.DiskFmt == "" {
+		return "", fmt.Errorf("disk_format must be specified")
+	}
+	if req.ContainerFmt == "" {
+		return "", fmt.Errorf("container_format must be specified")
+	}
+
 	imageID, err := createImage(computeURL, token, req)
 	if err != nil {
 		return imageID, fmt.Errorf("failed to create image: %v", err)
 	}
 
+	// Upload to the /file endpoint
 	err = uploadImageData(computeURL, token, imageID, data)
 	if err != nil {
+		// Try to clean up failed image
+		_ = DeleteImage(computeURL, token, imageID)
 		return imageID, fmt.Errorf("failed to upload image data: %v", err)
 	}
 
