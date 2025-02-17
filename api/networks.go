@@ -4,36 +4,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // Network represents a single network object in the response.
 type Network struct {
-	ID                      string   `json:"id"`
-	Name                    string   `json:"name"`
-	Status                  string   `json:"status"`
-	ProjectID               string   `json:"project_id"`
-	AdminStateUp            bool     `json:"admin_state_up"`
-	MTU                     int      `json:"mtu"`
-	Shared                  bool     `json:"shared"`
-	RouterExternal          bool     `json:"router:external"`
-	AvailabilityZones       []string `json:"availability_zones"`
-	ProviderNetworkType     string   `json:"provider:network_type"`
-	ProviderPhysicalNetwork string   `json:"provider:physical_network"`
-	PortSecurityEnabled     bool     `json:"port_security_enabled"`
-	SubnetIDs               []string `json:"subnets"`
-	PortIDs                 []string `json:"ports"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	ProjectID string `json:"project_id"`
+	//AdminStateUp            bool     `json:"admin_state_up"`
+	//MTU                     int      `json:"mtu"`
+	Shared            bool     `json:"shared"`
+	RouterExternal    bool     `json:"router:external"`
+	AvailabilityZones []string `json:"availability_zones"`
+	//ProviderNetworkType     string   `json:"provider:network_type"`
+	//ProviderPhysicalNetwork string   `json:"provider:physical_network"`
+	PortSecurityEnabled bool     `json:"port_security_enabled"`
+	SubnetIDs           []string `json:"subnets"`
+	//PortIDs                 []string `json:"ports"`
 }
 
 type Subnet struct {
-	ID   string `json:"id"`
+	//ID   string `json:"id"`
 	Name string `json:"name"`
 	CIDR string `json:"cidr"`
 }
 
 // NetworkListResponse represents the response for listing networks.
-type NetworkListResponse struct {
-	Networks []Network `json:"networks"`
-}
+//type NetworkListResponse struct {
+//	Networks []Network `json:"networks"`
+//}
 
 // AttachNetworkRequest represents the payload for attaching a network to a VM.
 type AttachNetworkRequest struct {
@@ -41,7 +42,7 @@ type AttachNetworkRequest struct {
 		NetID    string   `json:"net_id,omitempty"`
 		PortID   string   `json:"port_id,omitempty"`
 		FixedIPs []IPInfo `json:"fixed_ips,omitempty"`
-		Tag      string   `json:"tag,omitempty"`
+		//		Tag      string   `json:"tag,omitempty"`
 	} `json:"interfaceAttachment"`
 }
 
@@ -66,8 +67,13 @@ type AttachNetworkResponse struct {
 }
 
 // ListNetworks fetches the list of networks available to the project.
-func ListNetworks(baseURL, token string, queryParams map[string]string) (NetworkListResponse, error) {
-	var result NetworkListResponse
+func ListNetworks(baseURL, token string, queryParams map[string]string) (struct {
+	Networks []Network `json:"networks"`
+}, error) {
+	//var result NetworkListResponse
+	var result struct {
+		Networks []Network `json:"networks"`
+	}
 
 	// Construct the request URL with query parameters.
 	baseURL += "/v2.0/networks"
@@ -100,8 +106,12 @@ func ListNetworks(baseURL, token string, queryParams map[string]string) (Network
 }
 
 // AttachNetworkToVM attaches a network interface to a VM with optional parameters.
-func AttachNetworkToVM(computeURL, token, vmID, networkID, portID, tag string, fixedIPs []string) (AttachNetworkResponse, error) {
+func AttachNetworkToVM(networkURL, computeURL, token, vmID, networkID, portID string, fixedIPs []string) (AttachNetworkResponse, error) {
 	var result AttachNetworkResponse
+	id, err := GetNetworkIDByName(networkURL, token, networkID)
+	if err == nil {
+		networkID = id
+	}
 
 	url := fmt.Sprintf("%s/servers/%s/os-interface", computeURL, vmID)
 
@@ -112,9 +122,7 @@ func AttachNetworkToVM(computeURL, token, vmID, networkID, portID, tag string, f
 	if portID != "" {
 		request.InterfaceAttachment.PortID = portID
 	}
-	if tag != "" {
-		request.InterfaceAttachment.Tag = tag
-	}
+
 	if len(fixedIPs) > 0 {
 		for _, ip := range fixedIPs {
 			request.InterfaceAttachment.FixedIPs = append(request.InterfaceAttachment.FixedIPs, IPInfo{IPAddress: ip})
@@ -177,4 +185,29 @@ func GetSubnetDetails(baseURL, token, subnetID string) (Subnet, error) {
 	}
 
 	return wrapper.Subnet, nil
+}
+
+// GetNetworkIDByName fetches the ID of a network by its name.
+func GetNetworkIDByName(baseURL, token, networkName string) (string, error) {
+	networks, err := ListNetworks(baseURL, token, nil)
+	if err != nil {
+		return "", err
+	}
+
+	foundNetworks := []Network{}
+	for _, network := range networks.Networks {
+		if strings.Contains(network.Name, networkName) {
+			foundNetworks = append(foundNetworks, network)
+		}
+	}
+
+	if len(foundNetworks) == 0 {
+		return "", fmt.Errorf("no network found for name %s", networkName)
+	}
+
+	if len(foundNetworks) > 1 {
+		return "", fmt.Errorf("multiple networks found for name %s", networkName)
+	}
+
+	return foundNetworks[0].ID, nil
 }

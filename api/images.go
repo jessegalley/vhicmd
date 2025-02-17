@@ -5,26 +5,21 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
+
+	"github.com/jessegalley/vhicmd/internal/httpclient"
+	"github.com/spf13/viper"
 )
 
 // Image represents a virtual machine image.
 type Image struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Status        string   `json:"status"`
-	Visibility    string   `json:"visibility"`
-	CreatedAt     string   `json:"created_at"`
-	UpdatedAt     string   `json:"updated_at"`
-	Size          int64    `json:"size"`
-	MinDisk       int      `json:"min_disk"`
-	MinRAM        int      `json:"min_ram"`
-	Owner         string   `json:"owner"`
-	ContainerFmt  string   `json:"container_format"`
-	DiskFmt       string   `json:"disk_format"`
-	Tags          []string `json:"tags"`
-	Protected     bool     `json:"protected"`
-	DirectURL     string   `json:"direct_url,omitempty"`
-	TraitRequired string   `json:"trait:CUSTOM_HCI_122E856B9E9C4D80A0F8C21591B5AFCB,omitempty"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Size    int64  `json:"size"`
+	MinDisk int    `json:"min_disk"`
+	MinRAM  int    `json:"min_ram"`
+	Owner   string `json:"owner"`
 }
 
 type CreateImageRequest struct {
@@ -118,13 +113,20 @@ func createImage(computeURL, token string, req CreateImageRequest) (string, erro
 // UploadImageData uploads the actual image data
 func uploadImageData(computeURL, token, imageID string, data io.Reader) error {
 	url := fmt.Sprintf("%s/v2/images/%s/file", computeURL, imageID)
-	apiResp, err := callBigPUT(url, token, data)
+
+	if viper.GetBool("debug") {
+		fmt.Printf("Attempting upload to URL: %s\n", url)
+	}
+
+	resp, err := httpclient.UploadBigFile(url, token, data)
 	if err != nil {
 		return fmt.Errorf("upload failed: %v", err)
 	}
+	defer resp.Body.Close()
 
-	if apiResp.ResponseCode != 204 {
-		return fmt.Errorf("upload failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	if resp.StatusCode != 204 && resp.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload failed [%d]: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	return nil
@@ -132,15 +134,94 @@ func uploadImageData(computeURL, token, imageID string, data io.Reader) error {
 
 // CreateAndUploadImage creates an image and uploads the image data
 func CreateAndUploadImage(computeURL, token string, req CreateImageRequest, data io.Reader) (string, error) {
+	// Create image with disk_format and container_format specified
+	if req.DiskFmt == "" {
+		return "", fmt.Errorf("disk_format must be specified")
+	}
+	if req.ContainerFmt == "" {
+		return "", fmt.Errorf("container_format must be specified")
+	}
+
 	imageID, err := createImage(computeURL, token, req)
 	if err != nil {
 		return imageID, fmt.Errorf("failed to create image: %v", err)
 	}
 
+	// Upload to the /file endpoint
 	err = uploadImageData(computeURL, token, imageID, data)
 	if err != nil {
+		// Try to clean up failed image
+		_ = DeleteImage(computeURL, token, imageID)
 		return imageID, fmt.Errorf("failed to upload image data: %v", err)
 	}
 
 	return imageID, nil
+}
+
+// GetImageByName fetches the details of an image by its name.
+// The image names are not unique, so this function returns the first image if only one is found,
+// if multiple images or none are found, it returns an error.
+func GetImageIDByName(computeURL, token, imageName string) (string, error) {
+	images, err := ListImages(computeURL, token, nil)
+	if err != nil {
+		return "", err
+	}
+
+	foundImages := []Image{}
+	for _, image := range images.Images {
+		if strings.Contains(image.Name, imageName) {
+			foundImages = append(foundImages, image)
+		}
+	}
+
+	if len(foundImages) == 0 {
+		return "", fmt.Errorf("no images found for name %s", imageName)
+	}
+	if len(foundImages) > 1 {
+		return "", fmt.Errorf("multiple images found for name %s", imageName)
+	}
+
+	return foundImages[0].ID, nil
+}
+
+// GetImageNameByID fetches the name of an image by its ID.
+func GetImageNameByID(computeURL, token, imageID string) (string, error) {
+	images, err := ListImages(computeURL, token, nil)
+	if err != nil {
+		return "", err
+	}
+	imageName := ""
+	for _, image := range images.Images {
+		if image.ID == imageID {
+			imageName = image.Name
+			break
+		}
+	}
+	if imageName == "" {
+		return "", fmt.Errorf("no image found for ID %s", imageID)
+	}
+	return imageName, nil
+}
+
+// GetImageByID fetches the details of an image by its ID.
+func GetImageByID(computeURL, token, imageID string) (Image, error) {
+	images, err := ListImages(computeURL, token, nil)
+	if err != nil {
+		return Image{}, err
+	}
+	for _, image := range images.Images {
+		if image.ID == imageID {
+			return image, nil
+		}
+	}
+	return Image{}, fmt.Errorf("no image found for ID %s", imageID)
+}
+
+// GetImageSize fetches the size of an image by its ID.
+func GetImageSize(computeURL, token, imageID string) (int64, error) {
+	image, err := GetImageByID(computeURL, token, imageID)
+	if err != nil {
+		return 0, err
+	}
+	return image.Size, nil
 }

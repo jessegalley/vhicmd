@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -315,9 +317,21 @@ func AuthenticateById(host, domainID, project, username, password string) (strin
 
 // Initialize TokenFile path on module load
 func init() {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		panic(fmt.Errorf("failed to get user home directory: %v", err))
-	}
-	TokenFile = filepath.Join(homeDir, ".vhicmd.token")
+    var home string
+    if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+        out, err := exec.Command("getent", "passwd", sudoUser).Output()
+        if err == nil {
+            home = strings.Split(string(out), ":")[5]
+        }
+    }
+
+    if home == "" {
+        var err error
+        home, err = os.UserHomeDir()
+        if err != nil {
+            panic(fmt.Errorf("failed to get user home directory: %v", err))
+        }
+    }
+
+    TokenFile = filepath.Join(home, ".vhicmd.token")
 }

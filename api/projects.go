@@ -12,8 +12,6 @@ type ProjectListResponse struct {
 		DomainID string `json:"domain_id"`
 		Name     string `json:"name"`
 		Enabled  bool   `json:"enabled"`
-		IsDomain bool   `json:"is_domain"`
-		ParentID string `json:"parent_id"`
 	} `json:"projects"`
 }
 

@@ -29,6 +29,11 @@ var setNetworkInstallCmd = &cobra.Command{
 			return err
 		}
 
+		id, err := api.GetVMIDByName(computeURL, tok.Value, vmID)
+		if err == nil {
+			vmID = id
+		}
+
 		enabled := value == "true"
 		err = api.UpdateNetworkInstall(computeURL, tok.Value, vmID, enabled)
 		if err != nil {

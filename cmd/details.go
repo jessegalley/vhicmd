@@ -26,6 +26,11 @@ var vmDetailsCmd = &cobra.Command{
 			return err
 		}
 
+		id, err := api.GetVMIDByName(computeURL, tok.Value, vmID)
+		if err == nil {
+			vmID = id
+		}
+
 		vm, err := api.GetVMDetails(computeURL, tok.Value, vmID)
 		if err != nil {
 			return err
@@ -88,6 +93,8 @@ var vmDetailsCmd = &cobra.Command{
 			return err
 		}
 
+		fmt.Printf("Network Ports: %v\n", networkPorts)
+
 		// Track MACs to avoid duplication
 		seenMACs := make(map[string]bool)
 
@@ -101,14 +108,13 @@ var vmDetailsCmd = &cobra.Command{
 				Name:    hciNet.Network.Label,
 				UUID:    hciNet.Network.ID,
 				MacAddr: hciNet.Mac,
-				PortID:  "N/A", // Default, updated if found
+				PortID:  "N/A",
 			}
 
-			// Match with networkPorts.InterfaceAttachments using NetID
+			// Match with networkPorts.InterfaceAttachments using NetID and MAC
 			for _, port := range networkPorts.InterfaceAttachments {
-				if port.NetID == hciNet.Network.ID {
+				if port.NetID == hciNet.Network.ID && port.MacAddr == hciNet.Mac {
 					netDetail.PortID = port.PortID
-
 					// Add IPs if they exist
 					for _, ip := range port.FixedIPs {
 						netDetail.IPs = append(netDetail.IPs, responseparser.IPDetail{
@@ -119,7 +125,7 @@ var vmDetailsCmd = &cobra.Command{
 				}
 			}
 
-			// If there are no IPs, it's an unmanaged network, but still has a Port ID
+			// If there are no IPs, it's an unmanaged network
 			if len(netDetail.IPs) == 0 {
 				netDetail.IPs = []responseparser.IPDetail{{Address: "N/A"}}
 			}
@@ -141,8 +147,71 @@ var vmDetailsCmd = &cobra.Command{
 	},
 }
 
+var portDetailsCmd = &cobra.Command{
+	Use:   "port [port_id]",
+	Short: "Show details of a specific port",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		portID := args[0]
+
+		computeURL, err := validateTokenEndpoint(tok, "compute")
+		if err != nil {
+			return err
+		}
+
+		networkURL, err := validateTokenEndpoint(tok, "network")
+		if err != nil {
+			return err
+		}
+
+		port, err := api.GetPortDetails(networkURL, tok.Value, portID)
+		if err != nil {
+			return err
+		}
+
+		if flagJsonOutput {
+			b, _ := json.MarshalIndent(port, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		}
+
+		// Convert fixed IPs to string array for display
+		ips := make([]string, 0)
+		for _, ip := range port.FixedIPs {
+			ips = append(ips, ip.IPAddress)
+		}
+
+		vmName, err := api.GetVMNameByID(computeURL, tok.Value, port.DeviceID)
+		if err != nil {
+			vmName = port.DeviceID
+		}
+
+		details := responseparser.PortDetails{
+			ID:              port.ID,
+			MACAddress:      port.MACAddress,
+			NetworkID:       port.NetworkID,
+			DeviceID:        vmName,
+			DeviceOwner:     port.DeviceOwner,
+			Status:          port.Status,
+			FixedIPs:        ips,
+			SecurityGroups:  port.SecurityGroups,
+			AdminStateUp:    port.AdminStateUp,
+			BindingHostID:   port.BindingHostID,
+			BindingVnicType: port.BindingVnicType,
+			DNSDomain:       port.DNSDomain,
+			DNSName:         port.DNSName,
+			CreatedAt:       port.CreatedAt,
+			UpdatedAt:       port.UpdatedAt,
+		}
+
+		responseparser.PrintPortDetailsTable(details)
+		return nil
+	},
+}
+
 func init() {
 	detailsCmd.AddCommand(vmDetailsCmd)
+	detailsCmd.AddCommand(portDetailsCmd)
 	rootCmd.AddCommand(detailsCmd)
 	detailsCmd.PersistentFlags().BoolVar(&flagJsonOutput, "json", false, "Output in JSON format")
 }

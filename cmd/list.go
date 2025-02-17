@@ -241,7 +241,7 @@ var listNetworksCmd = &cobra.Command{
 					subnet, _ := api.GetSubnetDetails(networkURL, tok.Value, subnetID)
 					CIDRs += subnet.CIDR
 					if subnetID != n.SubnetIDs[len(n.SubnetIDs)-1] {
-						CIDRs += ", "
+						CIDRs += ","
 					}
 				}
 
@@ -265,6 +265,72 @@ var listNetworksCmd = &cobra.Command{
 		}
 
 		responseparser.PrintNetworksTable(filteredNetworks)
+		return nil
+	},
+}
+
+var listPortsCmd = &cobra.Command{
+	Use:   "ports",
+	Short: "List network ports",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		computeURL, err := validateTokenEndpoint(tok, "compute")
+		if err != nil {
+			return err
+		}
+		networkURL, err := validateTokenEndpoint(tok, "network")
+		if err != nil {
+			return err
+		}
+
+		queryParams := make(map[string]string)
+		if deviceID, _ := cmd.Flags().GetString("device-id"); deviceID != "" {
+			queryParams["device_id"] = deviceID
+		}
+		if networkID, _ := cmd.Flags().GetString("network-id"); networkID != "" {
+			queryParams["network_id"] = networkID
+		}
+		if macAddress, _ := cmd.Flags().GetString("mac-address"); macAddress != "" {
+			queryParams["mac_address"] = macAddress
+		}
+		if status, _ := cmd.Flags().GetString("status"); status != "" {
+			queryParams["status"] = status
+		}
+
+		resp, err := api.ListPorts(networkURL, tok.Value, queryParams)
+		if err != nil {
+			return err
+		}
+
+		if flagJsonOutput {
+			b, _ := json.MarshalIndent(resp, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		}
+
+		var portList []responseparser.Port
+		for _, p := range resp.Ports {
+			vmName, err := api.GetVMNameByID(computeURL, tok.Value, p.DeviceID)
+			if err != nil {
+				vmName = p.DeviceID
+			}
+
+			ips := make([]string, 0)
+			for _, ip := range p.FixedIPs {
+				ips = append(ips, ip.IPAddress)
+			}
+
+			portList = append(portList, responseparser.Port{
+				ID:          p.ID,
+				MACAddress:  p.MACAddress,
+				NetworkID:   p.NetworkID,
+				DeviceID:    vmName,
+				DeviceOwner: p.DeviceOwner,
+				Status:      p.Status,
+				FixedIPs:    strings.Join(ips, ", "),
+			})
+		}
+
+		responseparser.PrintPortsTable(portList)
 		return nil
 	},
 }
@@ -365,6 +431,8 @@ func init() {
 	listNetworksCmd.Flags().String("status", "", "Filter networks by status (e.g., ACTIVE)")
 	listNetworksCmd.Flags().String("project-id", "", "Filter networks by project ID")
 
+	listPortsCmd.Flags().String("name", "", "Filter ports by name")
+
 	listVmCmd.Flags().String("name", "", "Filter by VM name")
 	listVmCmd.Flags().String("status", "", "Filter by VM status")
 	listVmCmd.Flags().Int("limit", 0, "Limit the number of VMs returned")
@@ -385,6 +453,7 @@ func init() {
 	listCmd.AddCommand(listDomainsCmd)
 	listCmd.AddCommand(listProjectsCmd)
 	listCmd.AddCommand(listNetworksCmd)
+	listCmd.AddCommand(listPortsCmd)
 	listCmd.AddCommand(listFlavorsCmd)
 	listCmd.AddCommand(listVmCmd)
 	listCmd.AddCommand(listImagesCmd)

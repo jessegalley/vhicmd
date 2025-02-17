@@ -127,7 +127,6 @@ var configGetCmd = &cobra.Command{
 }
 
 func init() {
-	configCmd.PersistentFlags().StringP("config", "c", "", "config file (default is $HOME/.vhirc)")
 
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configGetCmd)
