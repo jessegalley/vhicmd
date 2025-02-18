@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jessegalley/vhicmd/api"
@@ -103,6 +105,43 @@ var migrateVMCmd = &cobra.Command{
 		if err == nil && fid != "" {
 			flavorRef = fid
 		}
+
+		// --- BEGIN SKETCHY STUFF ---
+		// Wake up NFS
+		// ---------------------------
+		if strings.HasPrefix(migrateFlagVMDKPath, "/mnt/vmdk/") {
+			cmd := exec.Command("dd", "if="+migrateFlagVMDKPath, "of=/dev/null", "bs=1M", "count=1", "status=progress")
+			if err := cmd.Start(); err != nil {
+				return fmt.Errorf("failed to start warmup read: %v", err)
+			}
+
+			time.Sleep(2 * time.Second)
+
+			psCmd := exec.Command("ps", "-p", fmt.Sprintf("%d", cmd.Process.Pid), "-o", "state=,cmd=")
+			output, err := psCmd.Output()
+			if err != nil {
+				cmd.Process.Kill()
+				return fmt.Errorf("failed to check process state: %v", err)
+			}
+
+			parts := strings.Fields(string(output))
+			if len(parts) >= 2 {
+				state := parts[0]
+				cmdline := strings.Join(parts[1:], " ")
+
+				// Kill if stuck
+				if state == "D" && strings.Contains(cmdline, "dd") && strings.Contains(cmdline, migrateFlagVMDKPath) {
+					cmd.Process.Signal(syscall.SIGKILL)
+					cmd.Wait()
+
+					// Quick retry
+					retryCmd := exec.Command("dd", "if="+migrateFlagVMDKPath, "of=/dev/null", "bs=1M", "count=1")
+					retryCmd.Run()
+				}
+			}
+		}
+		// --- END SKETCHY STUFF ---
+		// ---------------------------
 
 		fmt.Printf("Creating temporary image for VM '%s'...\n", migrateFlagVMName)
 
