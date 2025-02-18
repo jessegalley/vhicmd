@@ -66,16 +66,21 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 	rootCmd.SetUsageTemplate(helpTemplate)
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	//rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug mode")
 	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
 	rootCmd.PersistentFlags().StringP("host", "H", "", "VHI host to connect to")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vhirc)")
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Name() == "version" {
+			return nil
+		}
+
 		debug, _ := cmd.Flags().GetBool("debug")
 		viper.Set("debug", debug)
 		debugMode = debug
+
 		hostFlag, _ := cmd.Flags().GetString("host")
 		host := hostFlag
 		if host == "" {

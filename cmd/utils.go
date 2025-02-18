@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -262,4 +263,16 @@ func displayProjects(response api.ProjectListResponse) {
 	}
 	fmt.Println("\nAvailable projects:")
 	responseparser.PrintProjectsSelectionTable(displayProjects)
+}
+
+func validateMAC(mac string) error {
+	if mac == "" {
+		return nil // empty MAC is valid for auto-assignment
+	}
+
+	macRegex := regexp.MustCompile(`^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`)
+	if !macRegex.MatchString(mac) {
+		return fmt.Errorf("invalid MAC address format. Must be XX:XX:XX:XX:XX:XX")
+	}
+	return nil
 }

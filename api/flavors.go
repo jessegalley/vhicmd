@@ -17,6 +17,7 @@ type Flavor struct {
 	} `json:"links"`
 }
 
+// FlavorDetailResp represents the response for a single flavor detail request.
 type FlavorDetailResp struct {
 	Flavor struct {
 		ID          string            `json:"id"`
@@ -34,6 +35,7 @@ type FlavorDetailResp struct {
 	} `json:"flavor"`
 }
 
+// FlavorListResponse represents the response for listing flavors.
 type FlavorListResponse struct {
 	Flavors []Flavor `json:"flavors"`
 }
@@ -66,6 +68,7 @@ func ListFlavors(computeURL, token string, queryParams map[string]string) (Flavo
 	return result, nil
 }
 
+// GetFlavorDetails fetches the details of a single flavor from the stored compute URL
 func GetFlavorDetails(computeURL, token, flavorID string) (FlavorDetailResp, error) {
 	var result FlavorDetailResp
 

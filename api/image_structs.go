@@ -45,6 +45,7 @@ type Image struct {
 	Visibility string `json:"visibility"`
 }
 
+// CreateImageRequest is the structure for creating an image.
 type CreateImageRequest struct {
 	Name         string   `json:"name"`
 	ContainerFmt string   `json:"container_format"` // bare, ovf, ova, aki, ari, ami
@@ -64,6 +65,7 @@ type ImageListResponse struct {
 	Next   string  `json:"next,omitempty"`
 }
 
+// ImageDetails represents detailed information about an image
 type ImageDetails struct {
 	ID               string   `json:"id"`
 	Name             string   `json:"name"`

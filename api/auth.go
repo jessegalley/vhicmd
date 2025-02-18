@@ -31,35 +31,42 @@ type AuthPayload struct {
 	Auth Auth `json:"auth"`
 }
 
+// Auth structure for the authentication request
 type Auth struct {
 	Identity Identity `json:"identity"`
 	Scope    Scope    `json:"scope"`
 }
 
+// Identity structure for the authentication request
 type Identity struct {
 	Methods  []string `json:"methods"`
 	Password Password `json:"password"`
 }
 
+// Password structure for the authentication request
 type Password struct {
 	User User `json:"user"`
 }
 
+// User structure for the authentication request
 type User struct {
 	Name     string `json:"name"`
 	Domain   Domain `json:"domain"`
 	Password string `json:"password"`
 }
 
+// Domain structure for the authentication request
 type Domain struct {
 	ID   string `json:"id,omitempty"`
 	Name string `json:"name,omitempty"`
 }
 
+// Scope structure for the authentication request
 type Scope struct {
 	Project Project `json:"project"`
 }
 
+// Project structure for the authentication request
 type Project struct {
 	Name   string `json:"name,omitempty"`
 	Domain Domain `json:"domain"`
@@ -89,6 +96,7 @@ func newAuthPayload(domain Domain, project, user, password string) AuthPayload {
 	}
 }
 
+// AuthResponse structure for the authentication response
 type AuthResponse struct {
 	Token struct {
 		Methods []string `json:"methods"`
@@ -315,23 +323,22 @@ func AuthenticateById(host, domainID, project, username, password string) (strin
 	return apiResp.TokenHeader, nil
 }
 
-// Initialize TokenFile path on module load
 func init() {
-    var home string
-    if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-        out, err := exec.Command("getent", "passwd", sudoUser).Output()
-        if err == nil {
-            home = strings.Split(string(out), ":")[5]
-        }
-    }
+	var home string
+	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+		out, err := exec.Command("getent", "passwd", sudoUser).Output()
+		if err == nil {
+			home = strings.Split(string(out), ":")[5]
+		}
+	}
 
-    if home == "" {
-        var err error
-        home, err = os.UserHomeDir()
-        if err != nil {
-            panic(fmt.Errorf("failed to get user home directory: %v", err))
-        }
-    }
+	if home == "" {
+		var err error
+		home, err = os.UserHomeDir()
+		if err != nil {
+			panic(fmt.Errorf("failed to get user home directory: %v", err))
+		}
+	}
 
-    TokenFile = filepath.Join(home, ".vhicmd.token")
+	TokenFile = filepath.Join(home, ".vhicmd.token")
 }

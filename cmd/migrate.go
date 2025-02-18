@@ -31,7 +31,7 @@ import (
 var migrateCmd = &cobra.Command{
 	Use:     "migrate",
 	Aliases: []string{"mig"},
-	Short:   "Migrate resources",
+	Short:   "Migrate resources from VMWare to VHI",
 }
 
 // 'migrate vm' subcommand

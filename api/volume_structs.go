@@ -9,6 +9,13 @@ type Volume struct {
 	Status      string `json:"status"`
 }
 
+// AttachVolumeRequest represents a request to attach a volume to a server
+type AttachVolumeRequest struct {
+	VolumeAttachment struct {
+		VolumeID string `json:"volumeId"`
+	} `json:"volumeAttachment"`
+}
+
 // VolumeListResponse represents the response for listing volumes.
 type VolumeListResponse struct {
 	Volumes []Volume `json:"volumes"`
@@ -30,6 +37,7 @@ type CreateVolumeResponse struct {
 	Volume Volume `json:"volume"`
 }
 
+// SetBootableRequest represents the request to set a volume bootable
 type SetBootableRequest struct {
 	OsSetBootable struct {
 		Bootable bool `json:"bootable"`

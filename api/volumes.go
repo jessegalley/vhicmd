@@ -48,6 +48,7 @@ func GetVolumeDetails(storageURL, token, volumeID string) (VolumeDetail, error) 
 	return wrapper.Volume, nil
 }
 
+// GetVolumeIDByName fetches the ID of a volume by its name
 func GetVolumeIDByName(storageURL, token, volumeName string) (string, error) {
 	if isUuid(volumeName) {
 		return volumeName, nil
@@ -172,13 +173,6 @@ func DetachVolume(computeURL, token, vmID, volumeID string) error {
 		return fmt.Errorf("volume detachment failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
 	}
 	return nil
-}
-
-// AttachVolumeRequest represents a request to attach a volume to a server
-type AttachVolumeRequest struct {
-	VolumeAttachment struct {
-		VolumeID string `json:"volumeId"`
-	} `json:"volumeAttachment"`
 }
 
 // AttachVolume attaches a volume to a VM. This is an asynchronous operation.

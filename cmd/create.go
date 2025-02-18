@@ -181,6 +181,10 @@ var createPortCmd = &cobra.Command{
 			return fmt.Errorf("network is required: specify with --network flag")
 		}
 
+		if err := validateMAC(flagPortMAC); err != nil {
+			return err
+		}
+
 		// Check if network exists by name first
 		fmt.Printf("Checking network ID for %s\n", networkID)
 		netID, err := api.GetNetworkIDByName(networkURL, tok.Value, networkID)

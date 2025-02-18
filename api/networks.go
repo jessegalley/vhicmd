@@ -25,16 +25,12 @@ type Network struct {
 	//PortIDs                 []string `json:"ports"`
 }
 
+// Subnet represents a single subnet object in the response.
 type Subnet struct {
 	//ID   string `json:"id"`
 	Name string `json:"name"`
 	CIDR string `json:"cidr"`
 }
-
-// NetworkListResponse represents the response for listing networks.
-//type NetworkListResponse struct {
-//	Networks []Network `json:"networks"`
-//}
 
 // AttachNetworkRequest represents the payload for attaching a network to a VM.
 type AttachNetworkRequest struct {
@@ -147,8 +143,8 @@ func AttachNetworkToVM(networkURL, computeURL, token, vmID, networkID, portID st
 }
 
 // DetachNetworkFromVM detaches a network interface from a VM.
-func DetachNetworkFromVM(computeURL, token, vmID, portID string) error {
-	url := fmt.Sprintf("%s/servers/%s/os-interface/%s", computeURL, vmID, portID)
+func DetachNetworkFromVM(networkURL, token, vmID, portID string) error {
+	url := fmt.Sprintf("%s/servers/%s/os-interface/%s", networkURL, vmID, portID)
 
 	apiResp, err := callDELETE(url, token)
 	if err != nil {
@@ -163,12 +159,12 @@ func DetachNetworkFromVM(computeURL, token, vmID, portID string) error {
 }
 
 // GetSubnetDetails fetches the details of a subnet by its ID.
-func GetSubnetDetails(baseURL, token, subnetID string) (Subnet, error) {
+func GetSubnetDetails(networkURL, token, subnetID string) (Subnet, error) {
 	var wrapper struct {
 		Subnet Subnet `json:"subnet"`
 	}
 
-	url := fmt.Sprintf("%s/v2.0/subnets/%s", baseURL, subnetID)
+	url := fmt.Sprintf("%s/v2.0/subnets/%s", networkURL, subnetID)
 
 	apiResp, err := callGET(url, token)
 	if err != nil {
@@ -188,12 +184,12 @@ func GetSubnetDetails(baseURL, token, subnetID string) (Subnet, error) {
 }
 
 // GetNetworkIDByName fetches the ID of a network by its name.
-func GetNetworkIDByName(baseURL, token, networkName string) (string, error) {
+func GetNetworkIDByName(networkURL, token, networkName string) (string, error) {
 	if isUuid(networkName) {
 		return networkName, nil
 	}
 
-	networks, err := ListNetworks(baseURL, token, nil)
+	networks, err := ListNetworks(networkURL, token, nil)
 	if err != nil {
 		return "", err
 	}

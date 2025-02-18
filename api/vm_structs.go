@@ -87,6 +87,7 @@ type VMDetail struct {
 	Metadata                         map[string]string `json:"metadata,omitempty"`
 }
 
+// SecurityGroup represents a security group.
 type SecurityGroup struct {
 	Name        string              `json:"name"`
 	ID          string              `json:"id"`
@@ -94,6 +95,7 @@ type SecurityGroup struct {
 	Rules       []SecurityGroupRule `json:"rules,omitempty"`
 }
 
+// SecurityGroupRule represents a security group rule.
 type SecurityGroupRule struct {
 	ID             string `json:"id"`
 	Direction      string `json:"direction"`
@@ -104,11 +106,13 @@ type SecurityGroupRule struct {
 	EtherType      string `json:"ethertype"`
 }
 
+// VmVolume represents a volume attached to a VM.
 type VmVolume struct {
 	ID                  string `json:"id"`
 	DeleteOnTermination bool   `json:"delete_on_termination"`
 }
 
+// NetworkInfo represents network information for a VM.
 type NetworkInfo struct {
 	Mac     string `json:"mac"`
 	Network struct {
@@ -117,10 +121,12 @@ type NetworkInfo struct {
 	} `json:"network"`
 }
 
+// HCIInfo represents HCI information for a VM.
 type HCIInfo struct {
 	Network []NetworkInfo `json:"network"`
 }
 
+// VMNetworkListResponse represents the JSON structure for the list of VM networks.
 type VMNetworkListResponse struct {
 	InterfaceAttachments []struct {
 		PortState string `json:"port_state"`
@@ -144,6 +150,7 @@ type ActionRequest struct {
 	OsStop *struct{} `json:"os-stop,omitempty"`
 }
 
+// RebootRequestPayload is used for rebooting a VM
 type RebootRequestPayload struct {
 	Reboot struct {
 		Type string `json:"type"`
