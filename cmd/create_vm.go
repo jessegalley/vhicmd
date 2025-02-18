@@ -239,8 +239,6 @@ var createVMCmd = &cobra.Command{
 			}
 
 			fmt.Printf("Attaching network %s to VM %s...\n", networkID, resp.Server.ID)
-			// If MACs are provided, use them, use panel API to attach network since Nova/Neutron
-			// require admin permissions to set MAC addresses
 			var interfaceResp api.AttachNetworkResponse
 			if macAddresses[i] != "" {
 				// Call the panel API to attach the network interface with MAC

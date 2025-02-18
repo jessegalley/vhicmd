@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jessegalley/vhicmd/api"
@@ -14,15 +16,17 @@ import (
 )
 
 var createCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create resources like VMs or volumes",
+	Use:     "create",
+	Aliases: []string{"new"},
+	Short:   "Create resources like VMs or volumes",
 }
 
 // Subcommand: create Image (and upload data)
 var createImageCmd = &cobra.Command{
-	Use:   "image",
-	Short: "Create a new image",
-	Long:  "Create a new image from a VM snapshot (.qcow2, .raw, .vmdk, .iso)",
+	Use:     "image",
+	Aliases: []string{"img"},
+	Short:   "Create a new image",
+	Long:    "Create a new image from a VM snapshot (.qcow2, .raw, .vmdk, .iso)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		imageURL, err := validateTokenEndpoint(tok, "image")
 		if err != nil {
@@ -58,6 +62,45 @@ var createImageCmd = &cobra.Command{
 		default:
 			return fmt.Errorf("unsupported format %s, must be qcow2, raw, vmdk or iso", format)
 		}
+
+		// --- Begin really dumb stuff ---------------------------
+		// This is a hack to warm up the NFS on the VMDK stores in
+		// /mnt/vmdk, have no clue why this is necessary
+		// -------------------------------------------------------
+		if format == "vmdk" && strings.HasPrefix(flagImageFile, "/mnt/vmdk/") {
+			cmd := exec.Command("dd", "if="+flagImageFile, "of=/dev/null", "bs=1M", "count=1", "status=progress")
+			if err := cmd.Start(); err != nil {
+				return fmt.Errorf("failed to start warmup read: %v", err)
+			}
+
+			time.Sleep(2 * time.Second)
+
+			psCmd := exec.Command("ps", "-p", fmt.Sprintf("%d", cmd.Process.Pid), "-o", "state=,cmd=")
+			output, err := psCmd.Output()
+			if err != nil {
+				cmd.Process.Kill()
+				return fmt.Errorf("failed to check process state: %v", err)
+			}
+
+			parts := strings.Fields(string(output))
+			if len(parts) >= 2 {
+				state := parts[0]
+				cmdline := strings.Join(parts[1:], " ")
+
+				// Kill if stuck
+				if state == "D" && strings.Contains(cmdline, "dd") && strings.Contains(cmdline, flagImageFile) {
+					cmd.Process.Signal(syscall.SIGKILL)
+					cmd.Wait()
+
+					// Quick retry
+					retryCmd := exec.Command("dd", "if="+flagImageFile, "of=/dev/null", "bs=1M", "count=1")
+					retryCmd.Run()
+				}
+			}
+		}
+		// -------------------------------
+		// --- /End really dumb stuff ----
+		// -------------------------------
 
 		file, err := os.Open(flagImageFile)
 		if err != nil {
@@ -97,8 +140,9 @@ var createImageCmd = &cobra.Command{
 
 // Subcommand: create volume
 var createVolumeCmd = &cobra.Command{
-	Use:   "volume",
-	Short: "Create a new storage volume",
+	Use:     "volume",
+	Aliases: []string{"vol"},
+	Short:   "Create a new storage volume",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storageURL, err := validateTokenEndpoint(tok, "volumev3")
 		if err != nil {
@@ -122,8 +166,9 @@ var createVolumeCmd = &cobra.Command{
 }
 
 var createPortCmd = &cobra.Command{
-	Use:   "port",
-	Short: "Create a network port",
+	Use:     "port",
+	Aliases: []string{"nic", "interface"},
+	Short:   "Create a network port",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		networkURL, err := validateTokenEndpoint(tok, "network")
 		if err != nil {

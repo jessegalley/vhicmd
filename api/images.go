@@ -6,46 +6,51 @@ import (
 	"io"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/jessegalley/vhicmd/internal/httpclient"
 	"github.com/spf13/viper"
 )
 
-// Image represents a virtual machine image.
-type Image struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	Size    int64  `json:"size"`
-	MinDisk int    `json:"min_disk"`
-	MinRAM  int    `json:"min_ram"`
-	Owner   string `json:"owner"`
-}
+// GetImageDetails fetches detailed information about a specific image
+func GetImageDetails(imageURL, token, imageID string) (ImageDetails, error) {
+	var result ImageDetails
 
-type CreateImageRequest struct {
-	Name         string   `json:"name"`
-	ContainerFmt string   `json:"container_format"` // bare, ovf, ova, aki, ari, ami
-	DiskFmt      string   `json:"disk_format"`      // raw, vhd, vmdk, vdi, iso, qcow2, aki, ari, ami
-	MinDisk      int      `json:"min_disk,omitempty"`
-	MinRAM       int      `json:"min_ram,omitempty"`
-	Protected    bool     `json:"protected,omitempty"`
-	Tags         []string `json:"tags,omitempty"`
-	Visibility   string   `json:"visibility,omitempty"`
-}
+	url := fmt.Sprintf("%s/v2/images/%s", imageURL, imageID)
 
-// ImageListResponse is the structure for the API response.
-type ImageListResponse struct {
-	Images []Image `json:"images"`
-	Schema string  `json:"schema"`
-	First  string  `json:"first"`
-	Next   string  `json:"next,omitempty"`
+	apiResp, err := callGET(url, token)
+	if err != nil {
+		return result, fmt.Errorf("failed to get image details: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return result, fmt.Errorf("image details request failed [%d]: %s",
+			apiResp.ResponseCode, apiResp.Response)
+	}
+
+	// For debugging
+	if viper.GetBool("debug") {
+		fmt.Printf("\nUnmarshaling response into struct: %s\n", apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &result)
+	if err != nil {
+		return result, fmt.Errorf("failed to parse image details: %v", err)
+	}
+
+	// For debugging
+	if viper.GetBool("debug") {
+		fmt.Printf("\nParsed struct: %+v\n", result)
+	}
+
+	return result, nil
 }
 
 // ListImages fetches the list of images with optional filters and sorting.
-func ListImages(computeURL, token string, queryParams map[string]string) (ImageListResponse, error) {
+func ListImages(imageURL, token string, queryParams map[string]string) (ImageListResponse, error) {
 	var result ImageListResponse
 
-	baseURL, err := url.Parse(fmt.Sprintf("%s/v2/images", computeURL))
+	baseURL, err := url.Parse(fmt.Sprintf("%s/v2/images", imageURL))
 	if err != nil {
 		return result, fmt.Errorf("failed to parse URL: %v", err)
 	}
@@ -74,24 +79,24 @@ func ListImages(computeURL, token string, queryParams map[string]string) (ImageL
 }
 
 // DeleteImage deletes an image by ID.
-func DeleteImage(computeURL, token, imageID string) error {
-	url := fmt.Sprintf("%s/v2/images/%s", computeURL, imageID)
+func DeleteImage(imageURL, token, imageID string) error {
+	url := fmt.Sprintf("%s/v2/images/%s", imageURL, imageID)
 
 	apiResp, err := callDELETE(url, token)
 	if err != nil {
 		return fmt.Errorf("failed to delete image: %v", err)
 	}
 	if apiResp.ResponseCode != 204 {
-		return fmt.Errorf("delete image request failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+		return fmt.Errorf("delete image request failed [%d]", apiResp.ResponseCode)
 	}
 
 	return nil
 }
 
 // CreateImage initiates image creation and returns the image ID
-func createImage(computeURL, token string, req CreateImageRequest) (string, error) {
+func createImage(imageURL, token string, req CreateImageRequest) (string, error) {
 	var result Image
-	url := fmt.Sprintf("%s/v2/images", computeURL)
+	url := fmt.Sprintf("%s/v2/images", imageURL)
 
 	apiResp, err := callPOST(url, token, req)
 	if err != nil {
@@ -111,8 +116,8 @@ func createImage(computeURL, token string, req CreateImageRequest) (string, erro
 }
 
 // UploadImageData uploads the actual image data
-func uploadImageData(computeURL, token, imageID string, data io.Reader) error {
-	url := fmt.Sprintf("%s/v2/images/%s/file", computeURL, imageID)
+func uploadImageData(imageURL, token, imageID string, data io.Reader) error {
+	url := fmt.Sprintf("%s/v2/images/%s/file", imageURL, imageID)
 
 	if viper.GetBool("debug") {
 		fmt.Printf("Attempting upload to URL: %s\n", url)
@@ -133,8 +138,13 @@ func uploadImageData(computeURL, token, imageID string, data io.Reader) error {
 }
 
 // CreateAndUploadImage creates an image and uploads the image data
-func CreateAndUploadImage(computeURL, token string, req CreateImageRequest, data io.Reader) (string, error) {
-	// Create image with disk_format and container_format specified
+func CreateAndUploadImage(imageURL, token string, req CreateImageRequest, data io.Reader) (string, error) {
+	debug := viper.GetBool("debug")
+
+	if debug {
+		fmt.Printf("Creating image entry in Glance...\n")
+	}
+
 	if req.DiskFmt == "" {
 		return "", fmt.Errorf("disk_format must be specified")
 	}
@@ -142,17 +152,35 @@ func CreateAndUploadImage(computeURL, token string, req CreateImageRequest, data
 		return "", fmt.Errorf("container_format must be specified")
 	}
 
-	imageID, err := createImage(computeURL, token, req)
+	imageID, err := createImage(imageURL, token, req)
 	if err != nil {
 		return imageID, fmt.Errorf("failed to create image: %v", err)
 	}
 
-	// Upload to the /file endpoint
-	err = uploadImageData(computeURL, token, imageID, data)
+	if debug {
+		fmt.Printf("Image entry created with ID: %s\n", imageID)
+		fmt.Printf("Waiting for image to be ready for upload...\n")
+	}
+
+	// Wait for image to be in ready state
+	if err := waitForImageReady(imageURL, token, imageID, debug); err != nil {
+		return imageID, fmt.Errorf("image not ready: %v", err)
+	}
+
+	url := fmt.Sprintf("%s/v2/images/%s/file", imageURL, imageID)
+
+	resp, err := httpclient.UploadBigFile(url, token, data)
 	if err != nil {
-		// Try to clean up failed image
-		_ = DeleteImage(computeURL, token, imageID)
+		if debug {
+			fmt.Printf("Upload failed, cleaning up image entry...\n")
+		}
+		_ = DeleteImage(imageURL, token, imageID)
 		return imageID, fmt.Errorf("failed to upload image data: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if debug {
+		fmt.Printf("Upload completed successfully\n")
 	}
 
 	return imageID, nil
@@ -161,8 +189,12 @@ func CreateAndUploadImage(computeURL, token string, req CreateImageRequest, data
 // GetImageByName fetches the details of an image by its name.
 // The image names are not unique, so this function returns the first image if only one is found,
 // if multiple images or none are found, it returns an error.
-func GetImageIDByName(computeURL, token, imageName string) (string, error) {
-	images, err := ListImages(computeURL, token, nil)
+func GetImageIDByName(imageURL, token, imageName string) (string, error) {
+	if isUuid(imageName) {
+		return imageName, nil
+	}
+
+	images, err := ListImages(imageURL, token, nil)
 	if err != nil {
 		return "", err
 	}
@@ -185,8 +217,8 @@ func GetImageIDByName(computeURL, token, imageName string) (string, error) {
 }
 
 // GetImageNameByID fetches the name of an image by its ID.
-func GetImageNameByID(computeURL, token, imageID string) (string, error) {
-	images, err := ListImages(computeURL, token, nil)
+func GetImageNameByID(imageURL, token, imageID string) (string, error) {
+	images, err := ListImages(imageURL, token, nil)
 	if err != nil {
 		return "", err
 	}
@@ -204,8 +236,8 @@ func GetImageNameByID(computeURL, token, imageID string) (string, error) {
 }
 
 // GetImageByID fetches the details of an image by its ID.
-func GetImageByID(computeURL, token, imageID string) (Image, error) {
-	images, err := ListImages(computeURL, token, nil)
+func GetImageByID(imageURL, token, imageID string) (Image, error) {
+	images, err := ListImages(imageURL, token, nil)
 	if err != nil {
 		return Image{}, err
 	}
@@ -218,10 +250,139 @@ func GetImageByID(computeURL, token, imageID string) (Image, error) {
 }
 
 // GetImageSize fetches the size of an image by its ID.
-func GetImageSize(computeURL, token, imageID string) (int64, error) {
-	image, err := GetImageByID(computeURL, token, imageID)
+func GetImageSize(imageURL, token, imageID string) (int64, error) {
+	image, err := GetImageByID(imageURL, token, imageID)
 	if err != nil {
 		return 0, err
 	}
 	return image.Size, nil
+}
+
+// waitForImageReady polls the image API until the image is in a ready state
+func waitForImageReady(imageURL, token, imageID string, debug bool) error {
+	deadline := time.Now().Add(15 * time.Second)
+
+	for time.Now().Before(deadline) {
+		image, err := GetImageByID(imageURL, token, imageID)
+		if err != nil {
+			if debug {
+				fmt.Printf("Error checking image status: %v\n", err)
+			}
+			return fmt.Errorf("failed to check image status: %v", err)
+		}
+
+		if debug {
+			fmt.Printf("Image status: %s\n", image.Status)
+		}
+
+		switch image.Status {
+		case "queued":
+			// Ready for upload
+			return nil
+		case "error":
+			return fmt.Errorf("image entered error state")
+		}
+
+		time.Sleep(3 * time.Second)
+	}
+
+	return fmt.Errorf("timeout waiting for image to be ready")
+}
+
+// UpdateImageVisibility updates the visibility of an image
+func UpdateImageVisibility(imageURL, token, imageID, visibility string) error {
+	url := fmt.Sprintf("%s/v2/images/%s", imageURL, imageID)
+
+	request := UpdateImageVisibilityRequest{
+		Visibility: visibility,
+	}
+
+	apiResp, err := callPATCH(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to update image visibility: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return fmt.Errorf("visibility update failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// ListImageMembers lists all members who have access to an image
+func ListImageMembers(imageURL, token, imageID string) (ImageMemberList, error) {
+	var result ImageMemberList
+
+	url := fmt.Sprintf("%s/v2/images/%s/members", imageURL, imageID)
+
+	apiResp, err := callGET(url, token)
+	if err != nil {
+		return result, fmt.Errorf("failed to list image members: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return result, fmt.Errorf("list members request failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &result)
+	if err != nil {
+		return result, fmt.Errorf("failed to parse member list response: %v", err)
+	}
+
+	return result, nil
+}
+
+// AddImageMember adds a project as a member to an image
+func AddImageMember(imageURL, token, imageID, projectID string) error {
+	url := fmt.Sprintf("%s/v2/images/%s/members", imageURL, imageID)
+
+	request := AddImageMemberRequest{}
+	request.Member.MemberID = projectID
+
+	apiResp, err := callPOST(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to add image member: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return fmt.Errorf("add member request failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// RemoveImageMember removes a project's membership from an image
+func RemoveImageMember(imageURL, token, imageID, memberID string) error {
+	url := fmt.Sprintf("%s/v2/images/%s/members/%s", imageURL, imageID, memberID)
+
+	apiResp, err := callDELETE(url, token)
+	if err != nil {
+		return fmt.Errorf("failed to remove image member: %v", err)
+	}
+
+	if apiResp.ResponseCode != 204 {
+		return fmt.Errorf("remove member request failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// UpdateImageMemberStatus updates the status of a member's access to an image
+func UpdateImageMemberStatus(imageURL, token, imageID, memberID, status string) error {
+	url := fmt.Sprintf("%s/v2/images/%s/members/%s", imageURL, imageID, memberID)
+
+	request := UpdateImageMemberStatusRequest{
+		Status: status,
+	}
+
+	apiResp, err := callPUT(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to update member status: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return fmt.Errorf("update member status failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
 }

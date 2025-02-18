@@ -38,27 +38,18 @@ func ListProjects(identityUrl, token string) (ProjectListResponse, error) {
 
 // Get project Name by ID
 func GetProjectNameByID(identityUrl, token, projectID string) (string, error) {
-	var result ProjectListResponse
-
-	apiResp, err := callGET(fmt.Sprintf("%s/projects/%s", identityUrl, projectID), token)
+	projectList, err := ListProjects(identityUrl, token)
 	if err != nil {
 		return "", fmt.Errorf("failed to get project name: %v", err)
 	}
 
-	if apiResp.ResponseCode != 200 {
-		return "", fmt.Errorf("get project name failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	for _, project := range projectList.Projects {
+		if project.ID == projectID {
+			return project.Name, nil
+		}
 	}
 
-	err = json.Unmarshal([]byte(apiResp.Response), &result)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling project list: %v", err)
-	}
-
-	if len(result.Projects) == 0 {
-		return "", fmt.Errorf("no project found for ID %s", projectID)
-	}
-
-	return result.Projects[0].Name, nil
+	return "", fmt.Errorf("no project found for ID %s", projectID)
 }
 
 // Get project ID by Name

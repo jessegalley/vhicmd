@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/google/uuid"
 	"github.com/jessegalley/vhicmd/internal/httpclient"
 )
 
@@ -20,7 +21,6 @@ type ApiResponse struct {
 func callPOST(url, token string, body interface{}) (ApiResponse, error) {
 	apiResp := ApiResponse{}
 
-	// Marshal the request struct (whatever type it is) into JSON.
 	jsonData, err := json.Marshal(body)
 	if err != nil {
 		return apiResp, fmt.Errorf("error marshaling JSON payload: %v", err)
@@ -34,7 +34,6 @@ func callPOST(url, token string, body interface{}) (ApiResponse, error) {
 
 	apiResp.ResponseCode = resp.StatusCode
 
-	// Check if there's a token in the header
 	if token := resp.Header.Get("X-Subject-Token"); token != "" {
 		apiResp.TokenHeader = token
 	}
@@ -43,7 +42,12 @@ func callPOST(url, token string, body interface{}) (ApiResponse, error) {
 	if err != nil {
 		return apiResp, fmt.Errorf("error reading response body: %v", err)
 	}
-	apiResp.Response = string(bodyBytes)
+
+	if resp.StatusCode >= 400 {
+		apiResp.Response = FormatErrorResponse(string(bodyBytes))
+	} else {
+		apiResp.Response = string(bodyBytes)
+	}
 
 	return apiResp, nil
 }
@@ -64,7 +68,13 @@ func callGET(url, token string) (ApiResponse, error) {
 	if err != nil {
 		return apiResp, fmt.Errorf("error reading response body: %v", err)
 	}
-	apiResp.Response = string(body)
+
+	if resp.StatusCode >= 400 {
+		// Format error responses
+		apiResp.Response = FormatErrorResponse(string(body))
+	} else {
+		apiResp.Response = string(body)
+	}
 
 	return apiResp, nil
 }
@@ -85,27 +95,79 @@ func callDELETE(url, token string) (ApiResponse, error) {
 	if err != nil {
 		return apiResp, fmt.Errorf("error reading response body: %v", err)
 	}
-	apiResp.Response = string(body)
+
+	if resp.StatusCode >= 400 {
+		apiResp.Response = FormatErrorResponse(string(body))
+	} else {
+		apiResp.Response = string(body)
+	}
 
 	return apiResp, nil
 }
 
-// callBigPUT is a helper for large binary PUT requests
-func callBigPUT(url, token string, data io.Reader) (ApiResponse, error) {
+// callPATCH helper for PATCH requests
+func callPATCH(url, token string, body interface{}) (ApiResponse, error) {
 	apiResp := ApiResponse{}
 
-	resp, err := httpclient.UploadBigFile(url, token, data)
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return apiResp, fmt.Errorf("error marshaling JSON payload: %v", err)
+	}
+
+	resp, err := httpclient.SendRequestWithToken("PATCH", url, token, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return apiResp, fmt.Errorf("error making HTTP PATCH request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	apiResp.ResponseCode = resp.StatusCode
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return apiResp, fmt.Errorf("error reading response body: %v", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		apiResp.Response = FormatErrorResponse(string(bodyBytes))
+	} else {
+		apiResp.Response = string(bodyBytes)
+	}
+
+	return apiResp, nil
+}
+
+// callPUT helper for PUT requests
+func callPUT(url, token string, body interface{}) (ApiResponse, error) {
+	apiResp := ApiResponse{}
+
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return apiResp, fmt.Errorf("error marshaling JSON payload: %v", err)
+	}
+
+	resp, err := httpclient.SendRequestWithToken("PUT", url, token, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return apiResp, fmt.Errorf("error making HTTP PUT request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	apiResp.ResponseCode = resp.StatusCode
+
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return apiResp, fmt.Errorf("error reading response body: %v", err)
 	}
-	apiResp.Response = string(bodyBytes)
+
+	if resp.StatusCode >= 400 {
+		apiResp.Response = FormatErrorResponse(string(bodyBytes))
+	} else {
+		apiResp.Response = string(bodyBytes)
+	}
 
 	return apiResp, nil
+}
+
+func isUuid(s string) bool {
+	_, err := uuid.Parse(s)
+	return err == nil
 }

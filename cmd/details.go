@@ -10,8 +10,9 @@ import (
 )
 
 var detailsCmd = &cobra.Command{
-	Use:   "details",
-	Short: "Show details of resources",
+	Use:     "details",
+	Aliases: []string{"show"},
+	Short:   "Show details of resources",
 }
 
 var vmDetailsCmd = &cobra.Command{
@@ -209,9 +210,168 @@ var portDetailsCmd = &cobra.Command{
 	},
 }
 
+var imageDetailsCmd = &cobra.Command{
+	Use:     "image [image_id]",
+	Aliases: []string{"img"},
+	Short:   "Show details of a specific image",
+	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		imageID := args[0]
+
+		imageURL, err := validateTokenEndpoint(tok, "image")
+		if err != nil {
+			return err
+		}
+
+		identityURL, err := validateTokenEndpoint(tok, "identity")
+		if err != nil {
+			return err
+		}
+
+		// Try to resolve name to ID first
+		id, err := api.GetImageIDByName(imageURL, tok.Value, imageID)
+		if err == nil {
+			imageID = id
+		}
+
+		details, err := api.GetImageDetails(imageURL, tok.Value, imageID)
+		if err != nil {
+			return err
+		}
+
+		if flagJsonOutput {
+			b, _ := json.MarshalIndent(details, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		}
+
+		ownerName, err := api.GetProjectNameByID(identityURL, tok.Value, details.Owner)
+		if err != nil {
+			ownerName = details.Owner
+		} else {
+			ownerName = fmt.Sprintf("%s (%s)", ownerName, details.Owner)
+		}
+
+		displayDetails := responseparser.ImageDetails{
+			ID:              details.ID,
+			Name:            details.Name,
+			Status:          details.Status,
+			Visibility:      details.Visibility,
+			Size:            details.Size,
+			VirtualSize:     details.VirtualSize,
+			MinDisk:         details.MinDisk,
+			MinRAM:          details.MinRAM,
+			DiskFormat:      details.DiskFormat,
+			ContainerFormat: details.ContainerFormat,
+			CreatedAt:       details.CreatedAt,
+			UpdatedAt:       details.UpdatedAt,
+			Protected:       details.Protected,
+			//Checksum:         details.Checksum,
+			//OsHashAlgo:       details.OsHashAlgo,
+			//OsHashValue:      details.OsHashValue,
+			OsHidden:  details.OsHidden,
+			Owner:     ownerName,
+			Tags:      details.Tags,
+			DirectURL: details.DirectURL,
+			File:      details.File,
+			Self:      details.Self,
+			//Schema:           details.Schema,
+			//HwQemuGuestAgent: details.HwQemuGuestAgent,
+			//OsType:           details.OsType,
+			//OsDistro:         details.OsDistro,
+			ImageValidated: details.ImageValidated,
+		}
+
+		responseparser.PrintImageDetailsTable(displayDetails)
+		return nil
+	},
+}
+
+var volumeDetailsCmd = &cobra.Command{
+	Use:     "volume [volume_id]",
+	Aliases: []string{"vol"},
+	Short:   "Show details of a specific volume",
+	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		volumeID := args[0]
+
+		storageURL, err := validateTokenEndpoint(tok, "volumev3")
+		if err != nil {
+			return err
+		}
+
+		computeURL, err := validateTokenEndpoint(tok, "compute")
+		if err != nil {
+			return err
+		}
+
+		v, err := api.GetVolumeIDByName(storageURL, tok.Value, volumeID)
+		if err == nil {
+			volumeID = v
+		}
+
+		volume, err := api.GetVolumeDetails(storageURL, tok.Value, volumeID)
+		if err != nil {
+			return err
+		}
+
+		if flagJsonOutput {
+			b, _ := json.MarshalIndent(volume, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		}
+
+		// Convert API response to display format
+		details := responseparser.VolumeDetails{
+			ID:                 volume.ID,
+			Name:               volume.Name,
+			Status:             volume.Status,
+			Size:               volume.Size,
+			VolumeType:         volume.VolumeType,
+			Bootable:           volume.Bootable,
+			Multiattach:        volume.Multiattach,
+			Encrypted:          volume.Encrypted,
+			AvailabilityZone:   volume.AvailabilityZone,
+			CreatedAt:          volume.CreatedAt,
+			UpdatedAt:          volume.UpdatedAt,
+			Description:        volume.Description,
+			ReplicationStatus:  volume.ReplicationStatus,
+			SnapshotID:         volume.SnapshotID,
+			SourceVolID:        volume.SourceVolID,
+			GroupID:            volume.GroupID,
+			ConsistencyGroupID: volume.ConsistencyGroupID,
+			ConsumesQuota:      volume.ConsumesQuota,
+			Metadata:           volume.Metadata,
+		}
+
+		// Convert and resolve attachments
+		for _, att := range volume.Attachments {
+			attachment := responseparser.VolumeAttachment{
+				ServerID:     att.ServerID,
+				Device:       att.Device,
+				AttachedAt:   att.AttachedAt,
+				AttachmentID: att.AttachmentID,
+			}
+
+			// Try to resolve server name
+			vmName, err := api.GetVMNameByID(computeURL, tok.Value, att.ServerID)
+			if err == nil {
+				attachment.ServerName = vmName
+			}
+
+			details.Attachments = append(details.Attachments, attachment)
+		}
+
+		responseparser.PrintVolumeDetailsTable(details)
+		return nil
+	},
+}
+
 func init() {
 	detailsCmd.AddCommand(vmDetailsCmd)
 	detailsCmd.AddCommand(portDetailsCmd)
+	detailsCmd.AddCommand(imageDetailsCmd)
+	detailsCmd.AddCommand(volumeDetailsCmd)
 	rootCmd.AddCommand(detailsCmd)
 	detailsCmd.PersistentFlags().BoolVar(&flagJsonOutput, "json", false, "Output in JSON format")
 }

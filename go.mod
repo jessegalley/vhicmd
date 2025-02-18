@@ -4,6 +4,7 @@ go 1.22.1
 
 require (
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
+	github.com/google/uuid v1.6.0
 	github.com/gookit/color v1.5.4
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/spf13/cobra v1.8.1

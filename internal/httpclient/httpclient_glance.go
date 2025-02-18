@@ -1,12 +1,14 @@
 package httpclient
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"sync/atomic"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -14,7 +16,7 @@ import (
 )
 
 type countingReader struct {
-	r        io.Reader
+	r        *bufio.Reader
 	uploaded *atomic.Int64
 }
 
@@ -41,7 +43,10 @@ func UploadBigFile(url, token string, data io.Reader) (*http.Response, error) {
 	}
 
 	uploadedBytes := atomic.Int64{}
-	cr := &countingReader{r: data, uploaded: &uploadedBytes}
+	cr := &countingReader{
+		r:        bufio.NewReaderSize(data, 16*1024*1024), // 16MB buffer
+		uploaded: &uploadedBytes,
+	}
 
 	req, err := http.NewRequest("PUT", url, cr)
 	if err != nil {
@@ -50,36 +55,42 @@ func UploadBigFile(url, token string, data io.Reader) (*http.Response, error) {
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("X-Auth-Token", token)
 	req.Header.Set("Content-Length", fmt.Sprintf("%d", size))
-	req.Header.Del("Expect") // Prevent 100-Continue delays
+	req.Header.Del("Expect")
 
 	if viper.GetBool("debug") {
 		fmt.Printf("Starting upload (size: %d bytes)\n", size)
 	}
 
 	transport := &http.Transport{
-		DisableCompression:    true,
-		ForceAttemptHTTP2:     true,
+		DisableCompression:    false,
+		ForceAttemptHTTP2:     false,
 		ExpectContinueTimeout: 2 * time.Second,
+		// TCP optimizations
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
+			Control: func(network, address string, c syscall.RawConn) error {
+				return c.Control(func(fd uintptr) {
+					syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, 1024*1024)
+					syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1)
+				})
+			},
 		}).DialContext,
-		WriteBufferSize: 64 * 1024,
-		ReadBufferSize:  64 * 1024,
+		WriteBufferSize: 64 * 1024 * 1024,
+		ReadBufferSize:  64 * 1024 * 1024,
 	}
 
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   0, // No overall timeout for large uploads
+		Timeout:   0,
 	}
 
-	// Progress tracking
 	startTime := time.Now()
 	stopProgress := make(chan struct{})
 	go trackProgress(&uploadedBytes, size, startTime, stopProgress)
 
 	resp, err := client.Do(req)
-	close(stopProgress) // Stop progress goroutine
+	close(stopProgress)
 
 	if err != nil {
 		return nil, fmt.Errorf("upload failed: %v", err)
@@ -103,8 +114,8 @@ func trackProgress(uploadedBytes *atomic.Int64, size int64, startTime time.Time,
 
 	var lastBytes int64
 	lastTime := startTime
-	var emaSpeed float64 // Exponentially smoothed speed
-	alpha := 0.5         // Smoothing factor (adjust as needed)
+	var emaSpeed float64
+	alpha := 0.5
 
 	for {
 		select {
@@ -121,7 +132,7 @@ func trackProgress(uploadedBytes *atomic.Int64, size int64, startTime time.Time,
 			// Calculate instantaneous speed and smooth it
 			currentSpeed := float64(diff) / elapsed
 			if emaSpeed == 0 {
-				emaSpeed = currentSpeed // Initialize EMA with first speed value
+				emaSpeed = currentSpeed
 			} else {
 				emaSpeed = alpha*currentSpeed + (1-alpha)*emaSpeed
 			}

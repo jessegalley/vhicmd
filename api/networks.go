@@ -189,6 +189,10 @@ func GetSubnetDetails(baseURL, token, subnetID string) (Subnet, error) {
 
 // GetNetworkIDByName fetches the ID of a network by its name.
 func GetNetworkIDByName(baseURL, token, networkName string) (string, error) {
+	if isUuid(networkName) {
+		return networkName, nil
+	}
+
 	networks, err := ListNetworks(baseURL, token, nil)
 	if err != nil {
 		return "", err

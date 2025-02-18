@@ -27,8 +27,9 @@ import (
 
 // 'migrate' parent command
 var migrateCmd = &cobra.Command{
-	Use:   "migrate",
-	Short: "Migrate resources",
+	Use:     "migrate",
+	Aliases: []string{"mig"},
+	Short:   "Migrate resources",
 }
 
 // 'migrate vm' subcommand
@@ -254,12 +255,26 @@ var migrateFindCmd = &cobra.Command{
 	Short: "Find a VMDK file matching the pattern in /mnt/vmdk",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		single := false
+		if migrateFindVMDKSingle {
+			single = true
+		}
+
 		pattern := args[0]
 
 		fmt.Printf("Searching for VMDK files matching '%s' in /mnt/vmdk...\n", pattern)
 		start := time.Now()
 
-		matches, err := findVMDKsParallel(pattern)
+		var matches []string
+		var err error
+
+		if single {
+			match, verr := findSingleVMDK(pattern)
+			err = verr
+			matches = []string{match}
+		} else {
+			matches, err = findVMDKs(pattern)
+		}
 		duration := time.Since(start)
 
 		fmt.Printf("\nSearch completed in %s\n", duration)
@@ -292,6 +307,7 @@ var (
 	migrateFlagVMSize     int64
 	migrateFlagDiskBus    string
 	migrateFlagShutdown   bool
+	migrateFindVMDKSingle bool
 )
 
 func init() {
@@ -303,6 +319,7 @@ func init() {
 	migrateVMCmd.Flags().Int64Var(&migrateFlagVMSize, "size", 0, "Optional: size in GB if extending the image")
 	migrateVMCmd.Flags().StringVar(&migrateFlagDiskBus, "disk-bus", "scsi", "Disk bus for the root volume, default: scsi")
 	migrateVMCmd.Flags().BoolVar(&migrateFlagShutdown, "shutdown", false, "Shut down the new VM after creation")
+	migrateFindCmd.Flags().BoolVar(&migrateFindVMDKSingle, "single", false, "Find a single VMDK file")
 
 	migrateCmd.AddCommand(migrateVMCmd)
 	migrateCmd.AddCommand(migrateFindCmd)
