@@ -6,42 +6,6 @@ import (
 	"time"
 )
 
-// Volume represents a block storage volume.
-type Volume struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Size        int    `json:"size"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-}
-
-// VolumeListResponse represents the response for listing volumes.
-type VolumeListResponse struct {
-	Volumes []Volume `json:"volumes"`
-}
-
-// CreateVolumeRequest represents the payload for creating a volume.
-type CreateVolumeRequest struct {
-	Volume struct {
-		Name        string `json:"name"`
-		Size        int    `json:"size"`
-		Description string `json:"description,omitempty"`
-		ImageRef    string `json:"imageRef,omitempty"`
-		VolumeType  string `json:"volume_type,omitempty"`
-	} `json:"volume"`
-}
-
-// CreateVolumeResponse represents the response after creating a volume.
-type CreateVolumeResponse struct {
-	Volume Volume `json:"volume"`
-}
-
-type SetBootableRequest struct {
-	OsSetBootable struct {
-		Bootable bool `json:"bootable"`
-	} `json:"os-set_bootable"`
-}
-
 // SetVolumeBootable sets a volume’s bootable flag
 func SetVolumeBootable(storageURL, token, volumeID string, bootable bool) error {
 	url := fmt.Sprintf("%s/volumes/%s/action", storageURL, volumeID)
@@ -57,6 +21,58 @@ func SetVolumeBootable(storageURL, token, volumeID string, bootable bool) error 
 		return fmt.Errorf("failed to set bootable flag [%d]: %s", resp.ResponseCode, resp.Response)
 	}
 	return nil
+}
+
+// GetVolumeDetails fetches detailed information about a specific volume
+func GetVolumeDetails(storageURL, token, volumeID string) (VolumeDetail, error) {
+	var wrapper struct {
+		Volume VolumeDetail `json:"volume"`
+	}
+
+	url := fmt.Sprintf("%s/volumes/%s", storageURL, volumeID)
+
+	apiResp, err := callGET(url, token)
+	if err != nil {
+		return wrapper.Volume, fmt.Errorf("failed to fetch volume details: %v", err)
+	}
+	if apiResp.ResponseCode != 200 {
+		return wrapper.Volume, fmt.Errorf("get volume details request failed [%d]: %s",
+			apiResp.ResponseCode, apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &wrapper)
+	if err != nil {
+		return wrapper.Volume, fmt.Errorf("failed to parse volume details: %v", err)
+	}
+
+	return wrapper.Volume, nil
+}
+
+// GetVolumeIDByName fetches the ID of a volume by its name
+func GetVolumeIDByName(storageURL, token, volumeName string) (string, error) {
+	if isUuid(volumeName) {
+		return volumeName, nil
+	}
+	qP := make(map[string]string)
+	volumes, err := ListVolumes(storageURL, token, qP)
+	if err != nil {
+		return "", err
+	}
+
+	foundVolumes := []Volume{}
+	for _, volume := range volumes.Volumes {
+		if volume.Name == volumeName {
+			foundVolumes = append(foundVolumes, volume)
+		}
+	}
+
+	if len(foundVolumes) == 0 {
+		return "", fmt.Errorf("no volumes found for name %s", volumeName)
+	}
+	if len(foundVolumes) > 1 {
+		return "", fmt.Errorf("multiple volumes found for name %s", volumeName)
+	}
+	return foundVolumes[0].ID, nil
 }
 
 // ListVolumes fetches the list of volumes.
@@ -143,4 +159,166 @@ func WaitForVolumeStatus(storageURL, token, volumeID, targetStatus string) error
 		time.Sleep(10 * time.Second)
 	}
 	return fmt.Errorf("timeout waiting for volume to become %s", targetStatus)
+}
+
+// DetachVolume sends a request to detach a volume from a VM.
+func DetachVolume(computeURL, token, vmID, volumeID string) error {
+	url := fmt.Sprintf("%s/servers/%s/os-volume_attachments/%s", computeURL, vmID, volumeID)
+
+	apiResp, err := callDELETE(url, token)
+	if err != nil {
+		return fmt.Errorf("failed to detach volume: %v", err)
+	}
+	if apiResp.ResponseCode != 202 {
+		return fmt.Errorf("volume detachment failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+	return nil
+}
+
+// AttachVolume attaches a volume to a VM. This is an asynchronous operation.
+func AttachVolume(computeURL, token, vmID, volumeID string) error {
+	url := fmt.Sprintf("%s/servers/%s/os-volume_attachments", computeURL, vmID)
+
+	request := AttachVolumeRequest{}
+	request.VolumeAttachment.VolumeID = volumeID
+
+	apiResp, err := callPOST(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to attach volume: %v", err)
+	}
+	if apiResp.ResponseCode != 200 {
+		return fmt.Errorf("volume attachment failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+	return nil
+}
+
+// CreateVolumeTransfer creates a new volume transfer
+func CreateVolumeTransfer(storageURL, token, volumeID, name string) (VolumeTransfer, error) {
+	var result CreateTransferResponse
+	url := fmt.Sprintf("%s/volume-transfers", storageURL)
+
+	request := CreateTransferRequest{}
+	request.Transfer.VolumeID = volumeID
+	request.Transfer.Name = name
+
+	apiResp, err := callPOST(url, token, request)
+	if err != nil {
+		return result.Transfer, fmt.Errorf("failed to create volume transfer: %v", err)
+	}
+
+	if apiResp.ResponseCode != 202 {
+		return result.Transfer, fmt.Errorf("create transfer failed [%d]: %s",
+			apiResp.ResponseCode, apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &result)
+	if err != nil {
+		return result.Transfer, fmt.Errorf("failed to parse transfer response: %v", err)
+	}
+
+	return result.Transfer, nil
+}
+
+// AcceptVolumeTransfer accepts a volume transfer
+func AcceptVolumeTransfer(storageURL, token, transferID, authKey string) error {
+	url := fmt.Sprintf("%s/volume-transfers/%s/accept", storageURL, transferID)
+
+	request := AcceptTransferRequest{}
+	request.Accept.AuthKey = authKey
+
+	apiResp, err := callPOST(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to accept volume transfer: %v", err)
+	}
+
+	if apiResp.ResponseCode != 202 {
+		return fmt.Errorf("accept transfer failed [%d]: %s",
+			apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// DeleteVolumeTransfer deletes/cancels a volume transfer
+func DeleteVolumeTransfer(storageURL, token, transferID string) error {
+	url := fmt.Sprintf("%s/volume-transfers/%s", storageURL, transferID)
+
+	apiResp, err := callDELETE(url, token)
+	if err != nil {
+		return fmt.Errorf("failed to delete volume transfer: %v", err)
+	}
+
+	if apiResp.ResponseCode != 202 {
+		return fmt.Errorf("delete transfer failed [%d]: %s",
+			apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// ListVolumeTypeAccess lists projects with access to a volume type
+func ListVolumeTypeAccess(storageURL, token, volumeTypeID string) ([]VolumeTypeAccess, error) {
+	var result VolumeTypeAccessList
+	url := fmt.Sprintf("%s/types/%s/os-volume-type-access", storageURL, volumeTypeID)
+
+	apiResp, err := callGET(url, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list volume type access: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return nil, fmt.Errorf("list access failed [%d]: %s",
+			apiResp.ResponseCode, apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse access list: %v", err)
+	}
+
+	return result.VolumeTypeAccess, nil
+}
+
+// AddVolumeTypeAccess adds project access to a volume type
+func AddVolumeTypeAccess(storageURL, token, volumeTypeID, projectID string) error {
+	url := fmt.Sprintf("%s/types/%s/action", storageURL, volumeTypeID)
+
+	request := AddProjectAccessRequest{}
+	request.AddProjectAccess.Project = projectID
+
+	apiResp, err := callPOST(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to add volume type access: %v", err)
+	}
+
+	if apiResp.ResponseCode != 202 {
+		return fmt.Errorf("add access failed [%d]: %s",
+			apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// RemoveVolumeTypeAccess removes project access from a volume type
+func RemoveVolumeTypeAccess(storageURL, token, volumeTypeID, projectID string) error {
+	url := fmt.Sprintf("%s/types/%s/action", storageURL, volumeTypeID)
+
+	request := struct {
+		RemoveProjectAccess struct {
+			Project string `json:"project"`
+		} `json:"removeProjectAccess"`
+	}{}
+	request.RemoveProjectAccess.Project = projectID
+
+	apiResp, err := callPOST(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to remove volume type access: %v", err)
+	}
+
+	if apiResp.ResponseCode != 202 {
+		return fmt.Errorf("remove access failed [%d]: %s",
+			apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
 }

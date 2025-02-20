@@ -6,6 +6,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jessegalley/vhicmd/api"
 	"github.com/jessegalley/vhicmd/internal/config"
@@ -37,17 +38,49 @@ func Execute() {
 }
 
 func init() {
+	cobra.AddTemplateFunc("formatCommand", func(name string, aliases []string) string {
+		if len(aliases) > 0 {
+			return fmt.Sprintf("%s (%s)", name, strings.Join(aliases, " | "))
+		}
+		return name
+	})
+
+	helpTemplate := `Usage:{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}
+
+Available Commands (aliases):{{range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad (formatCommand .Name .Aliases) 35}} {{.Short}}{{end}}{{end}}
+
+Flags:
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{if .HasAvailableInheritedFlags}}
+
+Global Flags:
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
+
+Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
+
+Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
+`
+	rootCmd.SetUsageTemplate(helpTemplate)
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	//rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug mode")
 	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
 	rootCmd.PersistentFlags().StringP("host", "H", "", "VHI host to connect to")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vhirc)")
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Name() == "version" {
+			return nil
+		}
+
 		debug, _ := cmd.Flags().GetBool("debug")
 		viper.Set("debug", debug)
 		debugMode = debug
+
 		hostFlag, _ := cmd.Flags().GetString("host")
 		host := hostFlag
 		if host == "" {

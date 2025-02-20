@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jessegalley/vhicmd/api"
@@ -27,8 +29,9 @@ import (
 
 // 'migrate' parent command
 var migrateCmd = &cobra.Command{
-	Use:   "migrate",
-	Short: "Migrate resources",
+	Use:     "migrate",
+	Aliases: []string{"mig"},
+	Short:   "Migrate resources from VMWare to VHI",
 }
 
 // 'migrate vm' subcommand
@@ -102,6 +105,43 @@ var migrateVMCmd = &cobra.Command{
 		if err == nil && fid != "" {
 			flavorRef = fid
 		}
+
+		// --- BEGIN SKETCHY STUFF ---
+		// Wake up NFS
+		// ---------------------------
+		if strings.HasPrefix(migrateFlagVMDKPath, "/mnt/vmdk/") {
+			cmd := exec.Command("dd", "if="+migrateFlagVMDKPath, "of=/dev/null", "bs=1M", "count=1", "status=progress")
+			if err := cmd.Start(); err != nil {
+				return fmt.Errorf("failed to start warmup read: %v", err)
+			}
+
+			time.Sleep(2 * time.Second)
+
+			psCmd := exec.Command("ps", "-p", fmt.Sprintf("%d", cmd.Process.Pid), "-o", "state=,cmd=")
+			output, err := psCmd.Output()
+			if err != nil {
+				cmd.Process.Kill()
+				return fmt.Errorf("failed to check process state: %v", err)
+			}
+
+			parts := strings.Fields(string(output))
+			if len(parts) >= 2 {
+				state := parts[0]
+				cmdline := strings.Join(parts[1:], " ")
+
+				// Kill if stuck
+				if state == "D" && strings.Contains(cmdline, "dd") && strings.Contains(cmdline, migrateFlagVMDKPath) {
+					cmd.Process.Signal(syscall.SIGKILL)
+					cmd.Wait()
+
+					// Quick retry
+					retryCmd := exec.Command("dd", "if="+migrateFlagVMDKPath, "of=/dev/null", "bs=1M", "count=1")
+					retryCmd.Run()
+				}
+			}
+		}
+		// --- END SKETCHY STUFF ---
+		// ---------------------------
 
 		fmt.Printf("Creating temporary image for VM '%s'...\n", migrateFlagVMName)
 
@@ -254,12 +294,26 @@ var migrateFindCmd = &cobra.Command{
 	Short: "Find a VMDK file matching the pattern in /mnt/vmdk",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		single := false
+		if migrateFindVMDKSingle {
+			single = true
+		}
+
 		pattern := args[0]
 
 		fmt.Printf("Searching for VMDK files matching '%s' in /mnt/vmdk...\n", pattern)
 		start := time.Now()
 
-		matches, err := findVMDKsParallel(pattern)
+		var matches []string
+		var err error
+
+		if single {
+			match, verr := findSingleVMDK(pattern)
+			err = verr
+			matches = []string{match}
+		} else {
+			matches, err = findVMDKs(pattern)
+		}
 		duration := time.Since(start)
 
 		fmt.Printf("\nSearch completed in %s\n", duration)
@@ -292,6 +346,7 @@ var (
 	migrateFlagVMSize     int64
 	migrateFlagDiskBus    string
 	migrateFlagShutdown   bool
+	migrateFindVMDKSingle bool
 )
 
 func init() {
@@ -303,6 +358,7 @@ func init() {
 	migrateVMCmd.Flags().Int64Var(&migrateFlagVMSize, "size", 0, "Optional: size in GB if extending the image")
 	migrateVMCmd.Flags().StringVar(&migrateFlagDiskBus, "disk-bus", "scsi", "Disk bus for the root volume, default: scsi")
 	migrateVMCmd.Flags().BoolVar(&migrateFlagShutdown, "shutdown", false, "Shut down the new VM after creation")
+	migrateFindCmd.Flags().BoolVar(&migrateFindVMDKSingle, "single", false, "Find a single VMDK file")
 
 	migrateCmd.AddCommand(migrateVMCmd)
 	migrateCmd.AddCommand(migrateFindCmd)

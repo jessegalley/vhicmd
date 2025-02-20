@@ -6,7 +6,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 
+	"github.com/facette/natsort"
+	"github.com/gookit/color"
 	"github.com/jessegalley/vhicmd/api"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -23,7 +27,9 @@ var authCmd = &cobra.Command{
 	Long: `Sends credentials to the VHI API to receive an authentication token.
 The token will be required for all subsequent API calls.
 
-If the domain or project name contains spaces, enclose them in quotes.
+Project names with spaces don't require quotes:
+  vhicmd auth myDomain my project name
+
 Domain is the *name* not the ID. To use ID, pass the -i flag.
 For admin access, use "default" and "admin" respectively.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -34,7 +40,7 @@ For admin access, use "default" and "admin" respectively.`,
 			domain = args[0]
 		}
 		if len(args) > 1 {
-			project = args[1]
+			project = strings.Join(args[1:], " ")
 		}
 
 		if domain == "" || project == "" {
@@ -84,7 +90,7 @@ For admin access, use "default" and "admin" respectively.`,
 			os.Exit(2)
 		}
 
-		_, err := getAuthToken(host, domain, project, username, password)
+		_, err := doAuth(host, domain, project, username, password)
 		if err != nil {
 			fmt.Printf("ERROR: %v\n", err)
 			os.Exit(2)
@@ -119,6 +125,104 @@ For admin access, use "default" and "admin" respectively.`,
 	},
 }
 
+var switchProjectCmd = &cobra.Command{
+	Use:     "switch-project [project]",
+	Aliases: []string{"sw"},
+	Short:   "Switch to a different project using saved credentials",
+	Long: `Switch to a different project using credentials saved in ~/.vhirc
+If no project is specified, displays available projects and prompts for selection.
+  Project names with spaces don't require quotes.
+  Examples:
+    vhicmd switch-project           # Interactive project selection
+    vhicmd switch-project my project # Direct project switch
+    `,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		user := viper.GetString("username")
+		pass := viper.GetString("password")
+		if user == "" || pass == "" {
+			return fmt.Errorf("no saved credentials found, run 'vhicmd auth' first and save credentials")
+		}
+
+		domain := viper.GetString("domain")
+
+		identityUrl, err := validateTokenEndpoint(tok, "identity")
+		if err != nil {
+			return err
+		}
+
+		projects, err := api.ListProjects(identityUrl, tok.Value)
+		if err != nil {
+			return fmt.Errorf("failed to list projects: %v", err)
+		}
+
+		if len(projects.Projects) == 0 {
+			return fmt.Errorf("no projects found")
+		}
+
+		var project string
+		if len(args) > 0 {
+			project = strings.Join(args, " ")
+			found := false
+			for _, p := range projects.Projects {
+				if p.Name == project {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("project '%s' not found", project)
+			}
+		} else {
+			fmt.Printf("Current project: %s\n", color.Style{color.Bold}.Sprintf("%s", tok.Project))
+			sort.Slice(projects.Projects, func(i, j int) bool {
+				if projects.Projects[i].Enabled != projects.Projects[j].Enabled {
+					return projects.Projects[i].Enabled
+				}
+				return natsort.Compare(
+					strings.ToLower(projects.Projects[i].Name),
+					strings.ToLower(projects.Projects[j].Name),
+				)
+			})
+
+			displayProjects(projects)
+
+			// Get user selection
+			var selection int
+			for {
+				fmt.Print("\nEnter project number (or Ctrl+C to cancel): ")
+				_, err := fmt.Scanf("%d", &selection)
+				if err != nil {
+					// Clear input buffer
+					fmt.Scanf("%s")
+					continue
+				}
+				if selection < 1 || selection > len(projects.Projects) {
+					fmt.Printf("Invalid selection. Please enter 1-%d\n", len(projects.Projects))
+					continue
+				}
+				break
+			}
+			project = projects.Projects[selection-1].Name
+		}
+
+		_, err = doAuth(tok.Host, domain, project, user, pass)
+		if err != nil {
+			return fmt.Errorf("failed to switch project: %v", err)
+		}
+
+		viper.Set("project", project)
+		if err := viper.WriteConfig(); err != nil {
+			if err := viper.SafeWriteConfig(); err != nil {
+				fmt.Printf("ERROR: failed to save config: %v\n", err)
+				os.Exit(2)
+			}
+		}
+
+		fmt.Printf("Switched to project: %s\n", color.Style{color.Bold}.Sprintf("%s", project))
+		return nil
+	},
+}
+
 var (
 	flagUsername string
 	flagPassword string
@@ -129,6 +233,7 @@ var (
 
 func init() {
 	rootCmd.AddCommand(authCmd)
+	rootCmd.AddCommand(switchProjectCmd)
 
 	authCmd.Flags().BoolVarP(&flagUseIds, "id", "i", false, "use domain and project IDs instead of names")
 	authCmd.Flags().StringVarP(&flagAuthFile, "passfile", "f", "", "file containing the password")
@@ -140,7 +245,7 @@ func init() {
 	authCmd.MarkFlagFilename("passfile") // not really needed with Viper config but left for backward compatibility
 }
 
-func getAuthToken(host, domain, project, username, password string) (string, error) {
+func doAuth(host, domain, project, username, password string) (string, error) {
 	var authToken string
 	var authErr error
 	if flagUseIds {

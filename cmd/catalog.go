@@ -15,9 +15,10 @@ var (
 )
 
 var catalogCmd = &cobra.Command{
-	Use:   "catalog",
-	Short: "Fetch and display the OpenStack service catalog",
-	Long:  "Fetches the service catalog from the OpenStack Identity API and displays the available services and their endpoints.",
+	Use:     "catalog",
+	Aliases: []string{"cat"},
+	Short:   "Fetch and display the OpenStack service catalog",
+	Long:    "Fetches the service catalog from the OpenStack Identity API and displays the available services and their endpoints.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		resp, err := api.GetCatalog(tok.Host, tok.Value)
 		if err != nil {

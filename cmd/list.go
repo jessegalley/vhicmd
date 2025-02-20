@@ -3,8 +3,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/facette/natsort"
 	"github.com/jessegalley/vhicmd/api"
 	"github.com/jessegalley/vhicmd/internal/responseparser"
 	"github.com/spf13/cobra"
@@ -13,9 +15,10 @@ import (
 var flagJsonOutput bool
 
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List various objects in OpenStack/VHI (domains, projects, etc.)",
-	Long:  "List subcommand for domains, projects, or other items in the system. Requires a valid auth token.",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List various objects in OpenStack/VHI (domains, projects, etc.)",
+	Long:    "List subcommand for domains, projects, or other items in the system. Requires a valid auth token.",
 }
 
 var listDomainsCmd = &cobra.Command{
@@ -81,6 +84,10 @@ var listProjectsCmd = &cobra.Command{
 				Enabled:  p.Enabled,
 			})
 		}
+		sort.Slice(projectList, func(i, j int) bool {
+			return natsort.Compare(projectList[i].Name, projectList[j].Name)
+		})
+
 		responseparser.PrintProjectsTable(projectList)
 		return nil
 	},
@@ -143,14 +150,19 @@ var listFlavorsCmd = &cobra.Command{
 				Description: f.Description,
 			})
 		}
+		sort.Slice(flavorList, func(i, j int) bool {
+			return natsort.Compare(flavorList[i].Name, flavorList[j].Name)
+		})
+
 		responseparser.PrintFlavorsTable(flavorList)
 		return nil
 	},
 }
 
 var listImagesCmd = &cobra.Command{
-	Use:   "images",
-	Short: "List virtual machine images",
+	Use:     "images",
+	Aliases: []string{"img", "image"},
+	Short:   "List virtual machine images",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		imageURL, err := validateTokenEndpoint(tok, "image")
 		if err != nil {
@@ -185,13 +197,14 @@ var listImagesCmd = &cobra.Command{
 				strings.ToLower(nameFilter),
 			) {
 				imgList = append(imgList, responseparser.Image{
-					ID:      i.ID,
-					Name:    i.Name,
-					Status:  i.Status,
-					Size:    i.Size,
-					Owner:   i.Owner,
-					MinDisk: i.MinDisk,
-					MinRAM:  i.MinRAM,
+					ID:         i.ID,
+					Name:       i.Name,
+					Status:     i.Status,
+					Size:       i.Size,
+					Owner:      i.Owner,
+					MinDisk:    i.MinDisk,
+					MinRAM:     i.MinRAM,
+					Visibility: i.Visibility,
 				})
 			}
 		}
@@ -201,15 +214,62 @@ var listImagesCmd = &cobra.Command{
 			fmt.Println(string(b))
 			return nil
 		}
+		sort.Slice(imgList, func(i, j int) bool {
+			return natsort.Compare(imgList[i].Name, imgList[j].Name)
+		})
 
 		responseparser.PrintImagesTable(imgList)
 		return nil
 	},
 }
 
+var listImageMembersCmd = &cobra.Command{
+	Use:   "image-members <image>",
+	Short: "List members with access to a shared image",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		imageID := args[0]
+
+		imageURL, err := validateTokenEndpoint(tok, "image")
+		if err != nil {
+			return err
+		}
+
+		id, err := api.GetImageIDByName(imageURL, tok.Value, imageID)
+		if err == nil {
+			imageID = id
+		}
+
+		resp, err := api.ListImageMembers(imageURL, tok.Value, imageID)
+		if err != nil {
+			return err
+		}
+
+		if flagJsonOutput {
+			b, _ := json.MarshalIndent(resp, "", "  ")
+			fmt.Println(string(b))
+			return nil
+		}
+
+		var memberList []responseparser.ImageMember
+		for _, m := range resp.Members {
+			memberList = append(memberList, responseparser.ImageMember{
+				MemberID:  m.MemberID,
+				Status:    m.Status,
+				CreatedAt: m.CreatedAt,
+				UpdatedAt: m.UpdatedAt,
+			})
+		}
+
+		responseparser.PrintImageMembersTable(memberList)
+		return nil
+	},
+}
+
 var listNetworksCmd = &cobra.Command{
-	Use:   "networks",
-	Short: "List virtual networks",
+	Use:     "networks",
+	Aliases: []string{"nets", "net", "network"},
+	Short:   "List virtual networks",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		networkURL, err := validateTokenEndpoint(tok, "network")
 		if err != nil {
@@ -263,15 +323,18 @@ var listNetworksCmd = &cobra.Command{
 			fmt.Println(string(b))
 			return nil
 		}
-
+		sort.Slice(filteredNetworks, func(i, j int) bool {
+			return natsort.Compare(filteredNetworks[i].Name, filteredNetworks[j].Name)
+		})
 		responseparser.PrintNetworksTable(filteredNetworks)
 		return nil
 	},
 }
 
 var listPortsCmd = &cobra.Command{
-	Use:   "ports",
-	Short: "List network ports",
+	Use:     "ports",
+	Aliases: []string{"nics", "interfaces", "nic", "interface"},
+	Short:   "List network ports",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		computeURL, err := validateTokenEndpoint(tok, "compute")
 		if err != nil {
@@ -329,6 +392,9 @@ var listPortsCmd = &cobra.Command{
 				FixedIPs:    strings.Join(ips, ", "),
 			})
 		}
+		sort.Slice(portList, func(i, j int) bool {
+			return natsort.Compare(portList[i].DeviceID, portList[j].DeviceID)
+		})
 
 		responseparser.PrintPortsTable(portList)
 		return nil
@@ -336,9 +402,10 @@ var listPortsCmd = &cobra.Command{
 }
 
 var listVmCmd = &cobra.Command{
-	Use:   "vms",
-	Short: "List virtual machines",
-	Long:  "Fetches and displays a list of virtual machines in the project (determined by auth).",
+	Use:     "vms",
+	Aliases: []string{"vm", "instances", "servers"},
+	Short:   "List virtual machines",
+	Long:    "Fetches and displays a list of virtual machines in the project (determined by auth).",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		computeURL, err := validateTokenEndpoint(tok, "compute")
 		if err != nil {
@@ -377,15 +444,18 @@ var listVmCmd = &cobra.Command{
 			fmt.Println(string(b))
 			return nil
 		}
-
+		sort.Slice(vmList, func(i, j int) bool {
+			return natsort.Compare(vmList[i].Name, vmList[j].Name)
+		})
 		responseparser.PrintVMsTable(vmList)
 		return nil
 	},
 }
 
 var listVolumesCmd = &cobra.Command{
-	Use:   "volumes",
-	Short: "List storage volumes",
+	Use:     "volumes",
+	Aliases: []string{"vol", "vols", "storage", "volume"},
+	Short:   "List storage volumes",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storageURL, err := validateTokenEndpoint(tok, "volumev3")
 		if err != nil {
@@ -413,6 +483,9 @@ var listVolumesCmd = &cobra.Command{
 				Status: v.Status,
 			})
 		}
+		sort.Slice(volumeList, func(i, j int) bool {
+			return natsort.Compare(volumeList[i].Name, volumeList[j].Name)
+		})
 		responseparser.PrintVolumesTable(volumeList)
 		return nil
 	},
@@ -458,5 +531,6 @@ func init() {
 	listCmd.AddCommand(listVmCmd)
 	listCmd.AddCommand(listImagesCmd)
 	listCmd.AddCommand(listVolumesCmd)
+	listCmd.AddCommand(listImageMembersCmd)
 	rootCmd.AddCommand(listCmd)
 }

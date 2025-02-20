@@ -1,0 +1,1034 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VHI API Documentation</title>
+    <style>
+        body {
+            font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+            background-color: #1E1E2E;  
+            color: #CDD6F4;            
+            line-height: 1.7;
+            padding: 24px;
+            margin: 0;
+        }
+        h1, h2, h3 {
+            color: #FAB387;  
+            font-weight: 600;
+            margin-bottom: 0.5em;
+        }
+        pre {
+            background-color: #313244;  
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            overflow-x: auto;
+        }
+        .function-name {
+            color: #89B4FA;  
+            font-weight: 600;
+        }
+        .function-doc {
+            color: #A6E3A1;  
+            margin-bottom: 6px;
+            font-style: italic;
+        }
+        .param {
+            color: #F9E2AF;  
+        }
+        a {
+            color: #89B4FA;  
+            text-decoration: underline;
+            transition: color 0.2s;
+        }
+        a:hover {
+            color: #74C7EC;  
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 4px;
+        }
+        code {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.95rem;
+            background-color: #45475A;  
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>VHI API Documentation</h1>
+    <p>Package <strong>api</strong> provides a VHI/OpenStack client implementation.</p><h2>Authentication</h2>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Authenticate uses domain/project names, calls the auth token API, and returns the token on success.</p>
+<code><span class='function-name'>Authenticate</span>(<span class='param'>host</span> string, <span class='param'>domain</span> string, <span class='param'>project</span> string, <span class='param'>username</span> string, <span class='param'>password</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AuthenticateById uses domain ID instead of name<br/>Broken currently, need to fix - project ID not getting parsed<br/>TODO: Fix this</p>
+<code><span class='function-name'>AuthenticateById</span>(<span class='param'>host</span> string, <span class='param'>domainID</span> string, <span class='param'>project</span> string, <span class='param'>username</span> string, <span class='param'>password</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>LoadToken loads the token for a specific host</p>
+<code><span class='function-name'>LoadTokenStruct</span>(<span class='param'>host</span> string) (Token, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>SaveToken saves or updates a token in the token store</p>
+<code><span class='function-name'>SaveToken</span>(<span class='param'>host</span> string, <span class='param'>project</span> string, <span class='param'>token</span> string, <span class='param'>expiresAt</span> time.Time, <span class='param'>endpoints</span> map[string]string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Auth structure for the authentication request</p>
+<pre><code>type Auth struct {
+    Identity `json:"identity"`
+    Scope `json:"scope"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AuthPayload is used for the authentication request body</p>
+<pre><code>type AuthPayload struct {
+    Auth `json:"auth"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AuthResponse structure for the authentication response</p>
+<pre><code>type AuthResponse struct {
+    Token *ast.StructType `json:"token"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Domain structure for the authentication request</p>
+<pre><code>type Domain struct {
+    ID string `json:"id,omitempty"`
+    Name string `json:"name,omitempty"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Identity structure for the authentication request</p>
+<pre><code>type Identity struct {
+    Methods []string `json:"methods"`
+    Password `json:"password"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Password structure for the authentication request</p>
+<pre><code>type Password struct {
+    User `json:"user"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Project structure for the authentication request</p>
+<pre><code>type Project struct {
+    Name string `json:"name,omitempty"`
+    Domain `json:"domain"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Scope structure for the authentication request</p>
+<pre><code>type Scope struct {
+    Project `json:"project"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Token structure to store the token, its expiration, the host, and the compute URL</p>
+<pre><code>type Token struct {
+    Value string `json:"value"`
+    ExpiresAt time.Time `json:"expires_at"`
+    Host string `json:"host"`
+    Endpoints map[string]string `json:"endpoints,omitempty"`
+    Project string `json:"project,omitempty"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>TokenStore structure to store tokens per host</p>
+<pre><code>type TokenStore struct {
+    Tokens map[string]Token `json:"tokens"` // map[hostname]Token
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>User structure for the authentication request</p>
+<pre><code>type User struct {
+    Name string `json:"name"`
+    Domain `json:"domain"`
+    Password string `json:"password"`
+}
+</code></pre>
+</div>
+<h2>Catalog</h2>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetCatalog fetches the service catalog from the Identity API.</p>
+<code><span class='function-name'>GetCatalog</span>(<span class='param'>host</span> string, <span class='param'>token</span> string) (CatalogResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CatalogResponse represents the response from the /v3/auth/catalog endpoint.</p>
+<pre><code>type CatalogResponse struct {
+    Catalog []*ast.StructType `json:"catalog"`
+}
+</code></pre>
+</div>
+<h2>Domains</h2>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListDomains calls GET /v3/domains using the token for authentication.</p>
+<code><span class='function-name'>ListDomains</span>(<span class='param'>identityUrl</span> string, <span class='param'>token</span> string) (DomainListResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>DomainListResponse is the JSON structure returned by GET /v3/domains</p>
+<pre><code>type DomainListResponse struct {
+    Domains []*ast.StructType `json:"domains"`
+}
+</code></pre>
+</div>
+<h2>Flavors</h2>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetFlavorDetails fetches the details of a single flavor from the stored compute URL</p>
+<code><span class='function-name'>GetFlavorDetails</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>flavorID</span> string) (FlavorDetailResp, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>The flavor names are not unique, so this function a single flavor if only one is found,<br/>if multiple flavors or none are found, it returns an error.</p>
+<code><span class='function-name'>GetFlavorIDByName</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>flavorName</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListFlavors fetches the list of flavors from the stored compute URL</p>
+<code><span class='function-name'>ListFlavors</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>queryParams</span> map[string]string) (FlavorListResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Flavor represents a single flavor object returned by the API.</p>
+<pre><code>type Flavor struct {
+    ID string `json:"id"`
+    Name string `json:"name"`
+    Description string `json:"description,omitempty"`
+    Links []*ast.StructType `json:"links"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>FlavorDetailResp represents the response for a single flavor detail request.</p>
+<pre><code>type FlavorDetailResp struct {
+    Flavor *ast.StructType `json:"flavor"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>FlavorListResponse represents the response for listing flavors.</p>
+<pre><code>type FlavorListResponse struct {
+    Flavors []Flavor `json:"flavors"`
+}
+</code></pre>
+</div>
+<h2>Images</h2>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AddImageMember adds a project as a member to an image</p>
+<code><span class='function-name'>AddImageMember</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string, <span class='param'>projectID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateAndUploadImage creates an image and uploads the image data</p>
+<code><span class='function-name'>CreateAndUploadImage</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>req</span> CreateImageRequest, <span class='param'>data</span> io.Reader) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>DeleteImage deletes an image by ID.</p>
+<code><span class='function-name'>DeleteImage</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetImageByID fetches the details of an image by its ID.</p>
+<code><span class='function-name'>GetImageByID</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string) (Image, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetImageDetails fetches detailed information about a specific image</p>
+<code><span class='function-name'>GetImageDetails</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string) (ImageDetails, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetImageByName fetches the details of an image by its name.<br/>The image names are not unique, so this function returns the first image if only one is found,<br/>if multiple images or none are found, it returns an error.</p>
+<code><span class='function-name'>GetImageIDByName</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageName</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetImageNameByID fetches the name of an image by its ID.</p>
+<code><span class='function-name'>GetImageNameByID</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetImageSize fetches the size of an image by its ID.</p>
+<code><span class='function-name'>GetImageSize</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string) (int64, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListImageMembers lists all members who have access to an image</p>
+<code><span class='function-name'>ListImageMembers</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string) (ImageMemberList, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListImages fetches the list of images with optional filters and sorting.</p>
+<code><span class='function-name'>ListImages</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>queryParams</span> map[string]string) (ImageListResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>RemoveImageMember removes a project's membership from an image</p>
+<code><span class='function-name'>RemoveImageMember</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string, <span class='param'>memberID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateImageMemberStatus updates the status of a member's access to an image</p>
+<code><span class='function-name'>UpdateImageMemberStatus</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string, <span class='param'>memberID</span> string, <span class='param'>status</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateImageVisibility updates the visibility of an image</p>
+<code><span class='function-name'>UpdateImageVisibility</span>(<span class='param'>imageURL</span> string, <span class='param'>token</span> string, <span class='param'>imageID</span> string, <span class='param'>visibility</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AddImageMemberRequest represents the request to add a member</p>
+<pre><code>type AddImageMemberRequest struct {
+    Member *ast.StructType `json:"member"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateImageRequest is the structure for creating an image.</p>
+<pre><code>type CreateImageRequest struct {
+    Name string `json:"name"`
+    ContainerFmt string `json:"container_format"` // bare, ovf, ova, aki, ari, ami
+    DiskFmt string `json:"disk_format"` // raw, vhd, vmdk, vdi, iso, qcow2, aki, ari, ami
+    MinDisk int `json:"min_disk,omitempty"`
+    MinRAM int `json:"min_ram,omitempty"`
+    Protected bool `json:"protected,omitempty"`
+    Tags []string `json:"tags,omitempty"`
+    Visibility string `json:"visibility,omitempty"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Image represents a virtual machine image.</p>
+<pre><code>type Image struct {
+    ID string `json:"id"`
+    Name string `json:"name"`
+    Status string `json:"status"`
+    Size int64 `json:"size"`
+    MinDisk int `json:"min_disk"`
+    MinRAM int `json:"min_ram"`
+    Owner string `json:"owner"`
+    Visibility string `json:"visibility"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ImageDetails represents detailed information about an image</p>
+<pre><code>type ImageDetails struct {
+    ID string `json:"id"`
+    Name string `json:"name"`
+    Status string `json:"status"`
+    Visibility string `json:"visibility"`
+    Size int64 `json:"size"`
+    VirtualSize int64 `json:"virtual_size"`
+    MinDisk int `json:"min_disk"`
+    MinRAM int `json:"min_ram"`
+    DiskFormat string `json:"disk_format"`
+    ContainerFormat string `json:"container_format"`
+    CreatedAt string `json:"created_at"`
+    UpdatedAt string `json:"updated_at"`
+    Protected bool `json:"protected"`
+    Checksum string `json:"checksum"`
+    OsHashAlgo string `json:"os_hash_algo"`
+    OsHashValue string `json:"os_hash_value"`
+    OsHidden bool `json:"os_hidden"`
+    Owner string `json:"owner"`
+    Tags []string `json:"tags"`
+    DirectURL string `json:"direct_url"`
+    File string `json:"file"`
+    Self string `json:"self"`
+    Schema string `json:"schema"`
+    HwQemuGuestAgent string `json:"hw_qemu_guest_agent"`
+    OsType string `json:"os_type"`
+    OsDistro string `json:"os_distro"`
+    ImageValidated string `json:"image_validated"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ImageListResponse is the structure for the API response.</p>
+<pre><code>type ImageListResponse struct {
+    Images []Image `json:"images"`
+    Schema string `json:"schema"`
+    First string `json:"first"`
+    Next string `json:"next,omitempty"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ImageMember represents a member who has access to an image</p>
+<pre><code>type ImageMember struct {
+    MemberID string `json:"member_id"` // Project ID of the member
+    Status string `json:"status"` // Can be pending, accepted, rejected
+    CreatedAt string `json:"created_at"`
+    UpdatedAt string `json:"updated_at"`
+    ImageID string `json:"image_id"`
+    SchemaURI string `json:"schema"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ImageMemberList represents the response for listing image members</p>
+<pre><code>type ImageMemberList struct {
+    Members []ImageMember `json:"members"`
+    Schema string `json:"schema"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateImageMemberStatusRequest represents the request to update member status</p>
+<pre><code>type UpdateImageMemberStatusRequest struct {
+    Status string `json:"status"` // accepted, rejected, pending
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateImageVisibilityRequest represents the request to update image visibility</p>
+<pre><code>type UpdateImageVisibilityRequest struct {
+    Visibility string `json:"visibility"` // private, public, shared, community
+}
+</code></pre>
+</div>
+<h2>Networks</h2>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AttachNetworkToVM attaches a network interface to a VM with optional parameters.</p>
+<code><span class='function-name'>AttachNetworkToVM</span>(<span class='param'>networkURL</span> string, <span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>networkID</span> string, <span class='param'>portID</span> string, <span class='param'>fixedIPs</span> []string) (AttachNetworkResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreatePort creates a new port with specified parameters</p>
+<code><span class='function-name'>CreatePort</span>(<span class='param'>baseURL</span> string, <span class='param'>token</span> string, <span class='param'>networkID</span> string, <span class='param'>macAddress</span> string) (PortCreateResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>DeletePort deletes a port by ID</p>
+<code><span class='function-name'>DeletePort</span>(<span class='param'>baseURL</span> string, <span class='param'>token</span> string, <span class='param'>portID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>DetachNetworkFromVM detaches a network interface from a VM.</p>
+<code><span class='function-name'>DetachNetworkFromVM</span>(<span class='param'>networkURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>portID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetNetworkIDByName fetches the ID of a network by its name.</p>
+<code><span class='function-name'>GetNetworkIDByName</span>(<span class='param'>networkURL</span> string, <span class='param'>token</span> string, <span class='param'>networkName</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetPortDetails fetches details of a specific port by ID</p>
+<code><span class='function-name'>GetPortDetails</span>(<span class='param'>baseURL</span> string, <span class='param'>token</span> string, <span class='param'>portID</span> string) (Port, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetSubnetDetails fetches the details of a subnet by its ID.</p>
+<code><span class='function-name'>GetSubnetDetails</span>(<span class='param'>networkURL</span> string, <span class='param'>token</span> string, <span class='param'>subnetID</span> string) (Subnet, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListNetworks fetches the list of networks available to the project.</p>
+<code><span class='function-name'>ListNetworks</span>(<span class='param'>baseURL</span> string, <span class='param'>token</span> string, <span class='param'>queryParams</span> map[string]string) (*ast.StructType, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListPorts fetches list of ports with optional query parameters</p>
+<code><span class='function-name'>ListPorts</span>(<span class='param'>baseURL</span> string, <span class='param'>token</span> string, <span class='param'>queryParams</span> map[string]string) (PortListResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AttachNetworkRequest represents the payload for attaching a network to a VM.</p>
+<pre><code>type AttachNetworkRequest struct {
+    InterfaceAttachment *ast.StructType `json:"interfaceAttachment"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AttachNetworkResponse represents the response after attaching a network to a VM.</p>
+<pre><code>type AttachNetworkResponse struct {
+    InterfaceAttachment *ast.StructType `json:"interfaceAttachment"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>IPInfo represents the structure for specifying fixed IPs.</p>
+<pre><code>type IPInfo struct {
+    IPAddress string `json:"ip_address"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Network represents a single network object in the response.</p>
+<pre><code>type Network struct {
+    ID string `json:"id"`
+    Name string `json:"name"`
+    Status string `json:"status"`
+    ProjectID string `json:"project_id"`
+    Shared bool `json:"shared"`
+    RouterExternal bool `json:"router:external"`
+    AvailabilityZones []string `json:"availability_zones"`
+    PortSecurityEnabled bool `json:"port_security_enabled"`
+    SubnetIDs []string `json:"subnets"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Port represents a Neutron port</p>
+<pre><code>type Port struct {
+    AdminStateUp bool `json:"admin_state_up,omitempty"`
+    BindingHostID string `json:"binding:host_id,omitempty"`
+    BindingVnicType string `json:"binding:vnic_type,omitempty"`
+    CreatedAt string `json:"created_at,omitempty"`
+    DeviceID string `json:"device_id,omitempty"`
+    DeviceOwner string `json:"device_owner,omitempty"`
+    DNSDomain string `json:"dns_domain,omitempty"`
+    DNSName string `json:"dns_name,omitempty"`
+    FixedIPs []IPInfo `json:"fixed_ips,omitempty"`
+    ID string `json:"id,omitempty"`
+    MACAddress string `json:"mac_address,omitempty"`
+    NetworkID string `json:"network_id"`
+    SecurityGroups []string `json:"security_groups,omitempty"`
+    Status string `json:"status,omitempty"`
+    UpdatedAt string `json:"updated_at,omitempty"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>PortCreateRequest represents the request body for port creation</p>
+<pre><code>type PortCreateRequest struct {
+    Port `json:"port"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>PortCreateResponse represents the response from port creation</p>
+<pre><code>type PortCreateResponse struct {
+    Port `json:"port"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>PortListResponse represents the response for listing ports</p>
+<pre><code>type PortListResponse struct {
+    Ports []Port `json:"ports"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Subnet represents a single subnet object in the response.</p>
+<pre><code>type Subnet struct {
+    Name string `json:"name"`
+    CIDR string `json:"cidr"`
+}
+</code></pre>
+</div>
+<h2>Projects</h2>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Get project ID by Name</p>
+<code><span class='function-name'>GetProjectIDByName</span>(<span class='param'>identityUrl</span> string, <span class='param'>token</span> string, <span class='param'>projectName</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Get project Name by ID</p>
+<code><span class='function-name'>GetProjectNameByID</span>(<span class='param'>identityUrl</span> string, <span class='param'>token</span> string, <span class='param'>projectID</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListProjects calls GET /v3/projects using the token for authentication.</p>
+<code><span class='function-name'>ListProjects</span>(<span class='param'>identityUrl</span> string, <span class='param'>token</span> string) (ProjectListResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ProjectListResponse is the JSON structure returned by GET /v3/projects</p>
+<pre><code>type ProjectListResponse struct {
+    Projects []*ast.StructType `json:"projects"`
+}
+</code></pre>
+</div>
+<h2>Storage</h2>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AcceptVolumeTransfer accepts a volume transfer</p>
+<code><span class='function-name'>AcceptVolumeTransfer</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>transferID</span> string, <span class='param'>authKey</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AddVolumeTypeAccess adds project access to a volume type</p>
+<code><span class='function-name'>AddVolumeTypeAccess</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>volumeTypeID</span> string, <span class='param'>projectID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AttachVolume attaches a volume to a VM. This is an asynchronous operation.</p>
+<code><span class='function-name'>AttachVolume</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>volumeID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateVolume sends a request to create a new volume.</p>
+<code><span class='function-name'>CreateVolume</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>request</span> CreateVolumeRequest) (CreateVolumeResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateVolumeTransfer creates a new volume transfer</p>
+<code><span class='function-name'>CreateVolumeTransfer</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>volumeID</span> string, <span class='param'>name</span> string) (VolumeTransfer, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>DeleteVolume sends a request to delete a volume.</p>
+<code><span class='function-name'>DeleteVolume</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>volumeID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>DeleteVolumeTransfer deletes/cancels a volume transfer</p>
+<code><span class='function-name'>DeleteVolumeTransfer</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>transferID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>DetachVolume sends a request to detach a volume from a VM.</p>
+<code><span class='function-name'>DetachVolume</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>volumeID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetVolumeDetails fetches detailed information about a specific volume</p>
+<code><span class='function-name'>GetVolumeDetails</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>volumeID</span> string) (VolumeDetail, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetVolumeIDByName fetches the ID of a volume by its name</p>
+<code><span class='function-name'>GetVolumeIDByName</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>volumeName</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListVolumeTypeAccess lists projects with access to a volume type</p>
+<code><span class='function-name'>ListVolumeTypeAccess</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>volumeTypeID</span> string) ([]VolumeTypeAccess, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListVolumes fetches the list of volumes.</p>
+<code><span class='function-name'>ListVolumes</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>queryParams</span> map[string]string) (VolumeListResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>RemoveVolumeTypeAccess removes project access from a volume type</p>
+<code><span class='function-name'>RemoveVolumeTypeAccess</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>volumeTypeID</span> string, <span class='param'>projectID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>SetVolumeBootable sets a volume’s bootable flag</p>
+<code><span class='function-name'>SetVolumeBootable</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>volumeID</span> string, <span class='param'>bootable</span> bool) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>WaitForVolumeStatus polls volume status until it matches target or times out</p>
+<code><span class='function-name'>WaitForVolumeStatus</span>(<span class='param'>storageURL</span> string, <span class='param'>token</span> string, <span class='param'>volumeID</span> string, <span class='param'>targetStatus</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AcceptTransferRequest represents the request to accept a volume transfer</p>
+<pre><code>type AcceptTransferRequest struct {
+    Accept *ast.StructType `json:"accept"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AddProjectAccessRequest represents the request to add project access to a volume type</p>
+<pre><code>type AddProjectAccessRequest struct {
+    AddProjectAccess *ast.StructType `json:"addProjectAccess"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>AttachVolumeRequest represents a request to attach a volume to a server</p>
+<pre><code>type AttachVolumeRequest struct {
+    VolumeAttachment *ast.StructType `json:"volumeAttachment"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateTransferRequest represents the request to create a volume transfer</p>
+<pre><code>type CreateTransferRequest struct {
+    Transfer *ast.StructType `json:"transfer"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateTransferResponse represents the response from creating a transfer</p>
+<pre><code>type CreateTransferResponse struct {
+    Transfer VolumeTransfer `json:"transfer"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateVolumeRequest represents the payload for creating a volume.</p>
+<pre><code>type CreateVolumeRequest struct {
+    Volume *ast.StructType `json:"volume"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateVolumeResponse represents the response after creating a volume.</p>
+<pre><code>type CreateVolumeResponse struct {
+    Volume `json:"volume"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Link represents a volume API link</p>
+<pre><code>type Link struct {
+    Href string `json:"href"`
+    Rel string `json:"rel"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>SetBootableRequest represents the request to set a volume bootable</p>
+<pre><code>type SetBootableRequest struct {
+    OsSetBootable *ast.StructType `json:"os-set_bootable"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Volume represents a block storage volume.</p>
+<pre><code>type Volume struct {
+    ID string `json:"id"`
+    Name string `json:"name"`
+    Size int `json:"size"`
+    Description string `json:"description"`
+    Status string `json:"status"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>VolumeAttachment represents volume attachment information</p>
+<pre><code>type VolumeAttachment struct {
+    ServerID string `json:"server_id"`
+    AttachmentID string `json:"attachment_id"`
+    AttachedAt string `json:"attached_at"`
+    HostName string `json:"host_name"`
+    VolumeID string `json:"volume_id"`
+    Device string `json:"device"`
+    ID string `json:"id"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>VolumeDetail represents detailed information about a volume</p>
+<pre><code>type VolumeDetail struct {
+    ID string `json:"id"`
+    Name string `json:"name"`
+    Status string `json:"status"`
+    Size int `json:"size"`
+    AvailabilityZone string `json:"availability_zone"`
+    CreatedAt string `json:"created_at"`
+    UpdatedAt string `json:"updated_at"`
+    Attachments []VolumeAttachment `json:"attachments"`
+    Description string `json:"description"`
+    VolumeType string `json:"volume_type"`
+    VolumeTypeID string `json:"volume_type_id"`
+    SnapshotID string `json:"snapshot_id"`
+    SourceVolID string `json:"source_volid"`
+    Bootable string `json:"bootable"`
+    Multiattach bool `json:"multiattach"`
+    Encrypted bool `json:"encrypted"`
+    ReplicationStatus string `json:"replication_status"`
+    ConsistencyGroupID string `json:"consistencygroup_id"`
+    Metadata map[string]string `json:"metadata"`
+    MigrationStatus string `json:"migration_status"`
+    Links []Link `json:"links"`
+    UserID string `json:"user_id"`
+    ServiceUUID string `json:"service_uuid"`
+    SharedTargets bool `json:"shared_targets"`
+    ClusterName string `json:"cluster_name"`
+    GroupID string `json:"group_id"`
+    ProviderID string `json:"provider_id"`
+    ConsumesQuota bool `json:"consumes_quota"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>VolumeListResponse represents the response for listing volumes.</p>
+<pre><code>type VolumeListResponse struct {
+    Volumes []Volume `json:"volumes"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>VolumeTransfer represents a volume transfer request</p>
+<pre><code>type VolumeTransfer struct {
+    ID string `json:"id"`
+    CreatedAt string `json:"created_at"`
+    Name string `json:"name"`
+    VolumeID string `json:"volume_id"`
+    AuthKey string `json:"auth_key,omitempty"`
+    DestProjectID string `json:"destination_project_id,omitempty"`
+    SourceProjectID string `json:"source_project_id"`
+    Expires string `json:"expires_at,omitempty"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>VolumeTypeAccess represents access to a volume type</p>
+<pre><code>type VolumeTypeAccess struct {
+    ProjectID string `json:"project_id"`
+    VolumeTypeID string `json:"volume_type_id"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>VolumeTypeAccessList represents a list of volume type access entries</p>
+<pre><code>type VolumeTypeAccessList struct {
+    VolumeTypeAccess []VolumeTypeAccess `json:"volume_type_access"`
+}
+</code></pre>
+</div>
+<h2>Virtual Machines</h2>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ConfirmResize confirms a VM resize operation</p>
+<code><span class='function-name'>ConfirmResize</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateVM sends a request to create a new VM using callPOST.</p>
+<code><span class='function-name'>CreateVM</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>request</span> CreateVMRequest) (CreateVMResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>DeleteVM sends a request to delete a VM.</p>
+<code><span class='function-name'>DeleteVM</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>DeleteVMMetadataItem deletes a single metadata item</p>
+<code><span class='function-name'>DeleteVMMetadataItem</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>key</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetVMDetails fetches detailed information about a specific VM.</p>
+<code><span class='function-name'>GetVMDetails</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string) (VMDetail, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetVMIDByName fetches the ID of a VM by its name.</p>
+<code><span class='function-name'>GetVMIDByName</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmName</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetVMMetadata gets all metadata for a VM</p>
+<code><span class='function-name'>GetVMMetadata</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string) (map[string]string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetVMNameByID fetches the name of a VM by its ID.</p>
+<code><span class='function-name'>GetVMNameByID</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string) (string, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>GetVMNetworks fetches the list of networks attached to a VM.</p>
+<code><span class='function-name'>GetVMNetworks</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string) (VMNetworkListResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ListVMs fetches the list of virtual machines.</p>
+<code><span class='function-name'>ListVMs</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>queryParams</span> map[string]string) (VMListResponse, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>RebootVM sends a request to perform a reboot (HARD or SOFT) on a VM.</p>
+<code><span class='function-name'>RebootVM</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>rebootType</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ResizeVM changes the flavor of a VM (requires a subsequent confirm or revert)</p>
+<code><span class='function-name'>ResizeVM</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>flavorID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>RevertResize reverts a VM resize operation</p>
+<code><span class='function-name'>RevertResize</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>StopVM sends a request to stop a VM and waits for it to be fully stopped</p>
+<code><span class='function-name'>StopVM</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateVM updates basic VM properties like name and description</p>
+<code><span class='function-name'>UpdateVM</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>request</span> UpdateVMRequest) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateVMMetadata updates all metadata for a VM</p>
+<code><span class='function-name'>UpdateVMMetadata</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>metadata</span> map[string]string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateVMMetadataItem updates a single metadata item</p>
+<code><span class='function-name'>UpdateVMMetadataItem</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>key</span> string, <span class='param'>value</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateVMName updates just the VM's name</p>
+<code><span class='function-name'>UpdateVMName</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>newName</span> string) (error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>WaitForStatus waits for a VM to reach a given status or returns error on timeout/error</p>
+<code><span class='function-name'>WaitForStatus</span>(<span class='param'>computeURL</span> string, <span class='param'>token</span> string, <span class='param'>vmID</span> string, <span class='param'>targetStatus</span> string) (VMDetail, error)</code>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ActionRequest is used for some actions like "os-stop"</p>
+<pre><code>type ActionRequest struct {
+    OsStop **ast.StructType `json:"os-stop,omitempty"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateVMRequest defines the payload structure for creating a VM.</p>
+<pre><code>type CreateVMRequest struct {
+    Server *ast.StructType `json:"server"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>CreateVMResponse defines the structure of the response for creating a VM.</p>
+<pre><code>type CreateVMResponse struct {
+    Server *ast.StructType `json:"server"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>HCIInfo represents HCI information for a VM.</p>
+<pre><code>type HCIInfo struct {
+    Network []NetworkInfo `json:"network"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ImageField can handle both string and object forms;
+we do custom unmarshal for tricky image fields (string vs. object).</p>
+<pre><code>type ImageField struct {
+    ServerImage
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>NetworkInfo represents network information for a VM.</p>
+<pre><code>type NetworkInfo struct {
+    Mac string `json:"mac"`
+    Network *ast.StructType `json:"network"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>RebootRequestPayload is used for rebooting a VM</p>
+<pre><code>type RebootRequestPayload struct {
+    Reboot *ast.StructType `json:"reboot"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>SecurityGroup represents a security group.</p>
+<pre><code>type SecurityGroup struct {
+    Name string `json:"name"`
+    ID string `json:"id"`
+    Description string `json:"description"`
+    Rules []SecurityGroupRule `json:"rules,omitempty"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>SecurityGroupRule represents a security group rule.</p>
+<pre><code>type SecurityGroupRule struct {
+    ID string `json:"id"`
+    Direction string `json:"direction"`
+    Protocol string `json:"protocol"`
+    PortRangeMin *int `json:"port_range_min"`
+    PortRangeMax *int `json:"port_range_max"`
+    RemoteIPPrefix string `json:"remote_ip_prefix"`
+    EtherType string `json:"ethertype"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>ServerImage for referencing an image ID</p>
+<pre><code>type ServerImage struct {
+    ID string `json:"id"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateMetadataItemRequest represents a request to update a single metadata item</p>
+<pre><code>type UpdateMetadataItemRequest struct {
+    Meta *ast.StructType `json:"meta"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateMetadataRequest represents a request to update VM metadata</p>
+<pre><code>type UpdateMetadataRequest struct {
+    Metadata map[string]string `json:"metadata"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>UpdateVMRequest represents a request to update VM properties</p>
+<pre><code>type UpdateVMRequest struct {
+    Server *ast.StructType `json:"server"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Basic VM struct used by List operation</p>
+<pre><code>type VM struct {
+    ID string `json:"id"`
+    Name string `json:"name"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>Detailed VM struct used by Get operation</p>
+<pre><code>type VMDetail struct {
+    ID string `json:"id"`
+    Name string `json:"name"`
+    Status string `json:"status"`
+    PowerState int `json:"OS-EXT-STS:power_state"`
+    TaskState string `json:"OS-EXT-STS:task_state"`
+    Created string `json:"created"`
+    Updated string `json:"updated,omitempty"`
+    Image ImageField `json:"image"`
+    Flavor *ast.StructType `json:"flavor"`
+    SecurityGroups []SecurityGroup `json:"security_groups"`
+    HCIInfo `json:"hci_info"`
+    OSExtendedVolumesVolumesAttached []VmVolume `json:"os-extended-volumes:volumes_attached"`
+    Metadata map[string]string `json:"metadata,omitempty"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>VMListResponse represents the JSON structure for the list of VMs.</p>
+<pre><code>type VMListResponse struct {
+    Servers []VM `json:"servers"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>VMNetworkListResponse represents the JSON structure for the list of VM networks.</p>
+<pre><code>type VMNetworkListResponse struct {
+    InterfaceAttachments []*ast.StructType `json:"interfaceAttachments"`
+}
+</code></pre>
+</div>
+<div style='margin-bottom: 1em;'>
+<p class='function-doc'>VmVolume represents a volume attached to a VM.</p>
+<pre><code>type VmVolume struct {
+    ID string `json:"id"`
+    DeleteOnTermination bool `json:"delete_on_termination"`
+}
+</code></pre>
+</div>
+
+<h2>Common Parameters</h2>
+<ul>
+  <li><strong>computeURL</strong>: Nova API endpoint</li>
+  <li><strong>storageURL</strong>: Cinder API endpoint</li>
+  <li><strong>networkURL</strong>: Neutron API endpoint</li>
+  <li><strong>imageURL</strong>: Glance API endpoint</li>
+  <li><strong>token</strong>: Authentication token</li>
+  <li><strong>queryParams</strong>: Optional URL parameters (<code>map[string]string</code>)</li>
+</ul>
+
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        
+        
+        var h2s = document.querySelectorAll('body > h2');
+        h2s.forEach(function(header) {
+            
+            var arrowSpan = document.createElement('span');
+            arrowSpan.className = 'arrow';
+            
+            arrowSpan.textContent = ' ▼';
+            header.appendChild(arrowSpan);
+
+            
+            var groupContent = document.createElement('div');
+            groupContent.className = 'group-content';
+            var next = header.nextSibling;
+            while (next && !(next.nodeType === 1 && next.tagName === 'H2')) {
+                var current = next;
+                next = next.nextSibling;
+                groupContent.appendChild(current);
+            }
+            header.parentNode.insertBefore(groupContent, next);
+
+            
+            header.addEventListener('click', function() {
+                if (groupContent.style.display === 'none') {
+                    groupContent.style.display = 'block';
+                    arrowSpan.textContent = ' ▼';
+                } else {
+                    groupContent.style.display = 'none';
+                    arrowSpan.textContent = ' ►';
+                }
+            });
+        });
+    });
+    </script>
+</body>
+</html>

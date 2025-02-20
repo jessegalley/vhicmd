@@ -1,5 +1,7 @@
 package responseparser
 
+import "fmt"
+
 func getPowerStateString(state int) string {
 	switch state {
 	case 0:
@@ -25,4 +27,11 @@ func stringOrNA(s string) string {
 		return "N/A"
 	}
 	return s
+}
+
+func formatBytes(bytes int64) string {
+	if bytes == 0 {
+		return "0 bytes (0.00 GB)"
+	}
+	return fmt.Sprintf("%d bytes (%.2f GB)", bytes, float64(bytes)/1024/1024/1024)
 }

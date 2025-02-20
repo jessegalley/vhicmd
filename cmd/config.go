@@ -21,13 +21,15 @@ var configKeys = []string{
 }
 
 var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Manage vhicmd configuration",
+	Use:     "config",
+	Aliases: []string{"cfg", "conf"},
+	Short:   "Manage vhicmd configuration",
 }
 
 var configListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all config values",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all config values",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get config file flag from parent
 		configFile, _ := cmd.Flags().GetString("config")

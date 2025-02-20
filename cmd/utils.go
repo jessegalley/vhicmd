@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/facette/natsort"
 	"github.com/jessegalley/vhicmd/api"
+	"github.com/jessegalley/vhicmd/internal/responseparser"
 	"golang.org/x/term"
 )
 
@@ -158,8 +160,26 @@ func validateMacAddr(mac string) error {
 	return nil
 }
 
-// findVMDKsParallel launches one goroutine per datastore in /mnt/vmdk
-func findVMDKsParallel(pattern string) ([]string, error) {
+// findSingleVMDK() searches for a single VMDK file in /mnt/vmdk
+// if multiple matches are found, an error is returned
+func findSingleVMDK(pattern string) (string, error) {
+	matches, err := findVMDKs(pattern)
+	if err != nil {
+		return "", err
+	}
+
+	if len(matches) == 0 {
+		return "", fmt.Errorf("no matching VMDK files found")
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("multiple matching VMDK files found, be more specific")
+	}
+
+	return matches[0], nil
+}
+
+// findVMDKs launches one goroutine per datastore in /mnt/vmdk
+func findVMDKs(pattern string) ([]string, error) {
 	rootDir := "/mnt/vmdk"
 	var matches []string
 	var wg sync.WaitGroup
@@ -229,4 +249,30 @@ func findVMDKsInPath(rootPath, pattern string) []string {
 		return nil
 	})
 	return matches
+}
+
+func displayProjects(response api.ProjectListResponse) {
+	var displayProjects []responseparser.Project
+	for _, project := range response.Projects {
+		displayProjects = append(displayProjects, responseparser.Project{
+			ID:       project.ID,
+			DomainID: project.DomainID,
+			Name:     project.Name,
+			Enabled:  project.Enabled,
+		})
+	}
+	fmt.Println("\nAvailable projects:")
+	responseparser.PrintProjectsSelectionTable(displayProjects)
+}
+
+func validateMAC(mac string) error {
+	if mac == "" {
+		return nil // empty MAC is valid for auto-assignment
+	}
+
+	macRegex := regexp.MustCompile(`^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`)
+	if !macRegex.MatchString(mac) {
+		return fmt.Errorf("invalid MAC address format. Must be XX:XX:XX:XX:XX:XX")
+	}
+	return nil
 }

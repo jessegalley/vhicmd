@@ -7,189 +7,174 @@ import (
 	"time"
 )
 
-// CreateVMRequest defines the payload structure for creating a VM.
-type CreateVMRequest struct {
-	Server struct {
-		Name      string `json:"name"`
-		FlavorRef string `json:"flavorRef"`
-		ImageRef  string `json:"imageRef,omitempty"`
-		//Networks             []map[string]string      `json:"networks"`
-		Networks             string                   `json:"networks"` // for special "none" case
-		BlockDeviceMappingV2 []map[string]interface{} `json:"block_device_mapping_v2,omitempty"`
-		Metadata             map[string]string        `json:"metadata,omitempty"`
-		UserData             string                   `json:"user_data,omitempty"`
-	} `json:"server"`
-}
+// UpdateVM updates basic VM properties like name and description
+func UpdateVM(computeURL, token, vmID string, request UpdateVMRequest) error {
+	url := fmt.Sprintf("%s/servers/%s", computeURL, vmID)
 
-// CreateVMResponse defines the structure of the response for creating a VM.
-type CreateVMResponse struct {
-	Server struct {
-		ID    string `json:"id"`
-		Links []struct {
-			Href string `json:"href"`
-			Rel  string `json:"rel"`
-		} `json:"links"`
-		AdminPass string `json:"adminPass,omitempty"`
-	} `json:"server"`
-}
-
-// ServerImage for referencing an image ID
-type ServerImage struct {
-	ID string `json:"id"`
-}
-
-// ImageField can handle both string and object forms;
-// we do custom unmarshal for tricky image fields (string vs. object).
-type ImageField struct {
-	ServerImage
-}
-
-func (i *ImageField) UnmarshalJSON(data []byte) error {
-	// Try to unmarshal as string
-	var s string
-	if err := json.Unmarshal(data, &s); err == nil {
-		// If it was just a string, we don't have an ID for an object
-		i.ID = ""
-		return nil
-	}
-	// Otherwise unmarshal as image object
-	return json.Unmarshal(data, &i.ServerImage)
-}
-
-// Basic VM struct used by List operation
-type VM struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-// Detailed VM struct used by Get operation
-type VMDetail struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	//	TenantID   string     `json:"tenant_id"`
-	//	Host       string     `json:"host,omitempty"`
-	PowerState int    `json:"OS-EXT-STS:power_state"`
-	TaskState  string `json:"OS-EXT-STS:task_state"`
-	Created    string `json:"created"`
-	Updated    string `json:"updated,omitempty"`
-	//	Progress   int        `json:"progress,omitempty"`
-	//	VMState    string     `json:"OS-EXT-STS:vm_state"`
-	Image  ImageField `json:"image"`
-	Flavor struct {
-		ID           string            `json:"id"`
-		Ephemeral    int               `json:"ephemeral"`
-		RAM          int               `json:"ram"`
-		OriginalName string            `json:"original_name"`
-		VCPUs        int               `json:"vcpus"`
-		Swap         int               `json:"swap"`
-		Disk         int               `json:"disk"`
-		ExtraSpecs   map[string]string `json:"extra_specs"`
-	} `json:"flavor"`
-	SecurityGroups                   []SecurityGroup   `json:"security_groups"`
-	HCIInfo                          HCIInfo           `json:"hci_info"`
-	OSExtendedVolumesVolumesAttached []VmVolume        `json:"os-extended-volumes:volumes_attached"`
-	Metadata                         map[string]string `json:"metadata,omitempty"`
-}
-
-type SecurityGroup struct {
-	Name        string              `json:"name"`
-	ID          string              `json:"id"`
-	Description string              `json:"description"`
-	Rules       []SecurityGroupRule `json:"rules,omitempty"`
-}
-
-type SecurityGroupRule struct {
-	ID             string `json:"id"`
-	Direction      string `json:"direction"`
-	Protocol       string `json:"protocol"`
-	PortRangeMin   *int   `json:"port_range_min"`
-	PortRangeMax   *int   `json:"port_range_max"`
-	RemoteIPPrefix string `json:"remote_ip_prefix"`
-	EtherType      string `json:"ethertype"`
-}
-
-type VmVolume struct {
-	ID                  string `json:"id"`
-	DeleteOnTermination bool   `json:"delete_on_termination"`
-}
-
-type NetworkInfo struct {
-	Mac     string `json:"mac"`
-	Network struct {
-		ID    string `json:"id"`
-		Label string `json:"label"`
-	} `json:"network"`
-}
-
-type HCIInfo struct {
-	Network []NetworkInfo `json:"network"`
-}
-
-type VMNetworkListResponse struct {
-	InterfaceAttachments []struct {
-		PortState string `json:"port_state"`
-		FixedIPs  []struct {
-			IPAddress string `json:"ip_address"`
-			SubnetID  string `json:"subnet_id"`
-		} `json:"fixed_ips"`
-		PortID  string `json:"port_id"`
-		NetID   string `json:"net_id"`
-		MacAddr string `json:"mac_addr"`
-	} `json:"interfaceAttachments"`
-}
-
-// VMListResponse represents the JSON structure for the list of VMs.
-type VMListResponse struct {
-	Servers []VM `json:"servers"`
-}
-
-// ActionRequest is used for some actions like "os-stop"
-type ActionRequest struct {
-	OsStop *struct{} `json:"os-stop,omitempty"`
-}
-
-type RebootRequestPayload struct {
-	Reboot struct {
-		Type string `json:"type"`
-	} `json:"reboot"`
-}
-
-// DetachVolume sends a request to detach a volume from a VM.
-func DetachVolume(computeURL, token, vmID, volumeID string) error {
-	url := fmt.Sprintf("%s/servers/%s/os-volume_attachments/%s", computeURL, vmID, volumeID)
-
-	apiResp, err := callDELETE(url, token)
+	apiResp, err := callPUT(url, token, request)
 	if err != nil {
-		return fmt.Errorf("failed to detach volume: %v", err)
+		return fmt.Errorf("failed to update VM: %v", err)
 	}
-	if apiResp.ResponseCode != 202 {
-		return fmt.Errorf("volume detachment failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+
+	if apiResp.ResponseCode != 200 {
+		return fmt.Errorf("update VM failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
 	}
+
 	return nil
 }
 
-// AttachVolumeRequest represents a request to attach a volume to a server
-type AttachVolumeRequest struct {
-	VolumeAttachment struct {
-		VolumeID string `json:"volumeId"`
-	} `json:"volumeAttachment"`
+// UpdateVMName updates just the VM's name
+func UpdateVMName(computeURL, token, vmID, newName string) error {
+	request := UpdateVMRequest{}
+	request.Server.Name = newName
+
+	return UpdateVM(computeURL, token, vmID, request)
 }
 
-// AttachVolume attaches a volume to a VM. This is an asynchronous operation.
-func AttachVolume(computeURL, token, vmID, volumeID string) error {
-	url := fmt.Sprintf("%s/servers/%s/os-volume_attachments", computeURL, vmID)
+// UpdateVMMetadata updates all metadata for a VM
+func UpdateVMMetadata(computeURL, token, vmID string, metadata map[string]string) error {
+	url := fmt.Sprintf("%s/servers/%s/metadata", computeURL, vmID)
 
-	request := AttachVolumeRequest{}
-	request.VolumeAttachment.VolumeID = volumeID
+	request := UpdateMetadataRequest{
+		Metadata: metadata,
+	}
+
+	apiResp, err := callPUT(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to update VM metadata: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return fmt.Errorf("update metadata failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// UpdateVMMetadataItem updates a single metadata item
+func UpdateVMMetadataItem(computeURL, token, vmID, key, value string) error {
+	url := fmt.Sprintf("%s/servers/%s/metadata/%s", computeURL, vmID, key)
+
+	request := UpdateMetadataItemRequest{}
+	request.Meta.Value = value
+
+	apiResp, err := callPUT(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to update VM metadata item: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return fmt.Errorf("update metadata item failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// DeleteVMMetadataItem deletes a single metadata item
+func DeleteVMMetadataItem(computeURL, token, vmID, key string) error {
+	url := fmt.Sprintf("%s/servers/%s/metadata/%s", computeURL, vmID, key)
+
+	apiResp, err := callDELETE(url, token)
+	if err != nil {
+		return fmt.Errorf("failed to delete VM metadata item: %v", err)
+	}
+
+	if apiResp.ResponseCode != 204 {
+		return fmt.Errorf("delete metadata item failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// GetVMMetadata gets all metadata for a VM
+func GetVMMetadata(computeURL, token, vmID string) (map[string]string, error) {
+	var result struct {
+		Metadata map[string]string `json:"metadata"`
+	}
+
+	url := fmt.Sprintf("%s/servers/%s/metadata", computeURL, vmID)
+
+	apiResp, err := callGET(url, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM metadata: %v", err)
+	}
+
+	if apiResp.ResponseCode != 200 {
+		return nil, fmt.Errorf("get metadata failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	err = json.Unmarshal([]byte(apiResp.Response), &result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata response: %v", err)
+	}
+
+	return result.Metadata, nil
+}
+
+// ResizeVM changes the flavor of a VM (requires a subsequent confirm or revert)
+func ResizeVM(computeURL, token, vmID, flavorID string) error {
+	url := fmt.Sprintf("%s/servers/%s/action", computeURL, vmID)
+
+	request := struct {
+		Resize struct {
+			FlavorRef string `json:"flavorRef"`
+		} `json:"resize"`
+	}{}
+	request.Resize.FlavorRef = flavorID
 
 	apiResp, err := callPOST(url, token, request)
 	if err != nil {
-		return fmt.Errorf("failed to attach volume: %v", err)
+		return fmt.Errorf("failed to resize VM: %v", err)
 	}
-	if apiResp.ResponseCode != 200 {
-		return fmt.Errorf("volume attachment failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+
+	if apiResp.ResponseCode != 202 {
+		return fmt.Errorf("resize failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
 	}
+
+	return nil
+}
+
+// ConfirmResize confirms a VM resize operation
+func ConfirmResize(computeURL, token, vmID string) error {
+	url := fmt.Sprintf("%s/servers/%s/action", computeURL, vmID)
+
+	request := struct {
+		ConfirmResize *struct{} `json:"confirmResize"`
+	}{
+		ConfirmResize: &struct{}{},
+	}
+
+	apiResp, err := callPOST(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to confirm resize: %v", err)
+	}
+
+	if apiResp.ResponseCode != 204 {
+		return fmt.Errorf("confirm resize failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
+	return nil
+}
+
+// RevertResize reverts a VM resize operation
+func RevertResize(computeURL, token, vmID string) error {
+	url := fmt.Sprintf("%s/servers/%s/action", computeURL, vmID)
+
+	request := struct {
+		RevertResize *struct{} `json:"revertResize"`
+	}{
+		RevertResize: &struct{}{},
+	}
+
+	apiResp, err := callPOST(url, token, request)
+	if err != nil {
+		return fmt.Errorf("failed to revert resize: %v", err)
+	}
+
+	if apiResp.ResponseCode != 202 {
+		return fmt.Errorf("revert resize failed [%d]: %s", apiResp.ResponseCode, apiResp.Response)
+	}
+
 	return nil
 }
 
@@ -425,6 +410,10 @@ func DeleteVM(computeURL, token, vmID string) error {
 
 // GetVMIDByName fetches the ID of a VM by its name.
 func GetVMIDByName(computeURL, token, vmName string) (string, error) {
+	if isUuid(vmName) {
+		return vmName, nil
+	}
+
 	vms, err := ListVMs(computeURL, token, nil)
 	if err != nil {
 		return "", err
