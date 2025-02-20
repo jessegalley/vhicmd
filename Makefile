@@ -7,7 +7,7 @@ LDFLAGS := -s -w -X github.com/jessegalley/vhicmd/cmd.buildTime=${BUILD_TIME}
 BUILD_FLAGS := -ldflags="$(LDFLAGS)"
 GODOC := $(HOME)/go/bin/godoc
 
-.PHONY: all build clean docs docs-html
+.PHONY: all build clean docs
 
 all: build
 
@@ -19,9 +19,8 @@ clean:
 	rm -f api/doc.go
 	rm -rf docs
 
-# Creates a docs/api.html in Solarized style
-docs-html:
-	@echo "Generating HTML documentation with Solarized theme..."
+docs:
+	@echo "Generating HTML documentation for api package..."
 	@mkdir -p docs
 	@go run tools/docgen/main.go
 	@echo "Documentation written to docs/api.html"

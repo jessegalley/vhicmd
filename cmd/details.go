@@ -94,8 +94,6 @@ var vmDetailsCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Network Ports: %v\n", networkPorts)
-
 		// Track MACs to avoid duplication
 		seenMACs := make(map[string]bool)
 

@@ -288,6 +288,64 @@ var imageMemberStatusCmd = &cobra.Command{
 	},
 }
 
+var volumeAttachCmd = &cobra.Command{
+	Use:   "attach-volume <vm-id> <volume-id>",
+	Short: "Attach a volume to a VM",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		vmID := args[0]
+		volumeID := args[1]
+
+		computeURL, err := validateTokenEndpoint(tok, "compute")
+		if err != nil {
+			return err
+		}
+
+		// Get VM ID if name was provided
+		id, err := api.GetVMIDByName(computeURL, tok.Value, vmID)
+		if err == nil {
+			vmID = id
+		}
+
+		err = api.AttachVolume(computeURL, tok.Value, vmID, volumeID)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Attached volume %s to VM %s\n", volumeID, vmID)
+		return nil
+	},
+}
+
+var volumeDetachCmd = &cobra.Command{
+	Use:   "detach-volume <vm-id> <volume-id>",
+	Short: "Detach a volume from a VM",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		vmID := args[0]
+		volumeID := args[1]
+
+		computeURL, err := validateTokenEndpoint(tok, "compute")
+		if err != nil {
+			return err
+		}
+
+		// Get VM ID if name was provided
+		id, err := api.GetVMIDByName(computeURL, tok.Value, vmID)
+		if err == nil {
+			vmID = id
+		}
+
+		err = api.DetachVolume(computeURL, tok.Value, vmID, volumeID)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Detached volume %s from VM %s\n", volumeID, vmID)
+		return nil
+	},
+}
+
 var attachPortCmd = &cobra.Command{
 	Use:   "attach-port <vm-id> <port-id>",
 	Short: "Attach an existing port to a VM",
@@ -366,6 +424,8 @@ func init() {
 
 	// Volume subcommands
 	updateVolumeCmd.AddCommand(volumeTypeAccessCmd)
+	updateVolumeCmd.AddCommand(volumeAttachCmd)
+	updateVolumeCmd.AddCommand(volumeDetachCmd)
 
 	// Image subcommands
 	updateImageCmd.AddCommand(imageVisibilityCmd)

@@ -1,6 +1,8 @@
 # vhicmd
 
-A command-line utility for interacting with VHI (Virtuozzo Hybrid Infrastructure) APIs. This tool provides a streamlined interface for managing virtual machines, volumes, networks, and other OpenStack resources.
+A command-line utility for interacting with VHI (Virtuozzo Hybrid Infrastructure) APIs. This tool provides a streamlined interface for managing virtual machines, volumes, networks, images, and other resources in VHI environments.
+
+![vhicmd help](docs/vhicmd-help.png)
 
 ## Features
 
@@ -41,10 +43,10 @@ Configuration Options:
 - `domain`: VHI domain
 - `project`: VHI project
 - `username`: VHI username
-- `password`: VHI password (optional)
-- `networks`: Default networks for VM creation
-- `flavor_id`: Default flavor for VM creation
-- `image_id`: Default image for VM creation
+- `password`: VHI password
+- `networks`: Default networks for VM creation (CSV, optional)
+- `flavor_id`: Default flavor for VM creation (optional)
+- `image_id`: Default image for VM creation (optional)
 
 Manage configuration:
 ```bash
@@ -68,6 +70,7 @@ vhicmd auth <domain> <project> -u username -p password
 # Switch between projects
 vhicmd switch-project [project]   # Interactive if no project specified
 ```
+![vhicmd switch](docs/vhicmd-sw.png)
 
 ## Resource Management Commands
 
@@ -99,6 +102,8 @@ vhicmd details image <image-id>
 vhicmd details port <port-id>
 ```
 
+![vhicmd details](docs/vhicmd-show-vm.png)
+
 ### Virtual Machine Management
 
 Create VM:
@@ -122,6 +127,12 @@ Update VM:
 ```bash
 vhicmd update vm name <vm-id> <new-name>
 vhicmd update vm metadata <vm-id> <key> <value>
+```
+
+Attach volume:
+```bash
+vhicmd update vm attach-volume <vm-id> <volume-id>
+vhicmd update vm detach-volume <vm-id> <volume-id>
 ```
 
 Manage VM flavor:
