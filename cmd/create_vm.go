@@ -69,18 +69,33 @@ var createVMCmd = &cobra.Command{
 		macs := flagMacAddrCSV
 
 		// Split networks and IPs into slices
-		networkIDs := strings.Split(networks, ",")
-		ipAddresses := strings.Split(ips, ",")
-		macAddresses := strings.Split(macs, ",")
-
-		// Validate that the number of networks matches the number of IPs, unless MACs are provided
-		if (len(networkIDs) != len(ipAddresses)) && len(macAddresses) == 0 {
-			return fmt.Errorf("the number of networks (%d) must match the number of IPs (%d)", len(networkIDs), len(ipAddresses))
+		var networkIDs []string
+		if flagNetworkCSV != "" {
+			networkIDs = strings.Split(networks, ",")
 		}
 
-		// Validate that the number of networks matches the number of MACs, unless MACs are not provided
-		if len(macAddresses) != 0 && len(networkIDs) != len(macAddresses) {
-			return fmt.Errorf("the number of networks (%d) must match the number of MACs (%d)", len(networkIDs), len(macAddresses))
+		var ipAddresses []string
+		if flagIPCSV != "" {
+			ipAddresses = strings.Split(ips, ",")
+		}
+
+		var macAddresses []string
+		if flagMacAddrCSV != "" {
+			macAddresses = strings.Split(macs, ",")
+		}
+
+		// If MACs provided, ensure they match networks
+		if len(macAddresses) > 0 {
+			if len(networkIDs) != len(macAddresses) {
+				return fmt.Errorf("number of networks (%d) must match number of MACs (%d)", len(networkIDs), len(macAddresses))
+			}
+			// MACs provided so IPs shouldn't be
+			if len(ipAddresses) > 0 {
+				return fmt.Errorf("cannot specify both MACs and IPs")
+			}
+			// No MACs, ensure IPs match networks
+		} else if len(networkIDs) != len(ipAddresses) {
+			return fmt.Errorf("number of networks (%d) must match number of IPs (%d)", len(networkIDs), len(ipAddresses))
 		}
 
 		// Check that the networks exist by name, if not, then pass the ID
@@ -102,20 +117,6 @@ var createVMCmd = &cobra.Command{
 		if err == nil {
 			flavorRef = f
 		}
-
-		// Create network mapping with IPs
-		//var networkMapping []map[string]string
-		//for i, networkID := range networkIDs {
-		//	ip := strings.TrimSpace(ipAddresses[i])
-		//	if ip == "" {
-		//		return fmt.Errorf("IP address for network %s cannot be empty", networkID)
-		//	}
-
-		//	networkMapping = append(networkMapping, map[string]string{
-		//		"uuid":     strings.TrimSpace(networkID),
-		//		"fixed_ip": ip,
-		//	})
-		//}
 
 		// Calculate volume size
 		volumeSize := 10 // Default minimum
@@ -232,15 +233,10 @@ var createVMCmd = &cobra.Command{
 
 		// Iterate over user-provided networks and IPs
 		for i, networkID := range networkIDs {
-			ip := strings.TrimSpace(ipAddresses[i])
-			fixedIPs := []string{}
-			if ip != "" {
-				fixedIPs = append(fixedIPs, ip)
-			}
-
 			fmt.Printf("Attaching network %s to VM %s...\n", networkID, resp.Server.ID)
 			var interfaceResp api.AttachNetworkResponse
-			if macAddresses[i] != "" {
+
+			if len(macAddresses) > 0 && macAddresses[i] != "" {
 				// Call the panel API to attach the network interface with MAC
 				fmt.Printf("Using MAC address %s for network %s\n", macAddresses[i], networkID)
 				// Create a port with the MAC address
@@ -254,11 +250,17 @@ var createVMCmd = &cobra.Command{
 					return fmt.Errorf("failed to attach network %s with MAC %s: %v", networkID, macAddresses[i], err)
 				}
 			} else {
+				// Handle IP-based attachment
+				ip := strings.TrimSpace(ipAddresses[i])
+				fixedIPs := []string{}
+				if ip != "" {
+					fixedIPs = append(fixedIPs, ip)
+				}
+
 				// Call API to attach the network interface
 				interfaceResp, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, resp.Server.ID, networkID, "", fixedIPs)
 				if err != nil {
 					fmt.Printf("Failed to attach network with ip %s, retrying as unmanaged iface\n", ip)
-
 					// Retry without fixed IP (unmanaged interface)
 					interfaceResp, err = api.AttachNetworkToVM(networkURL, computeURL, tok.Value, resp.Server.ID, networkID, "", nil)
 					if err != nil {
@@ -276,10 +278,12 @@ var createVMCmd = &cobra.Command{
 				macAddress = "UNKNOWN"
 			}
 
-			// Extract IP from response, if available (otherwise, use user-provided)
-			attachedIP := ip // Default to user input
+			// Extract IP from response or use input IP
+			var attachedIP string
 			if len(interfaceResp.InterfaceAttachment.FixedIPs) > 0 {
 				attachedIP = interfaceResp.InterfaceAttachment.FixedIPs[0].IPAddress
+			} else if len(ipAddresses) > 0 {
+				attachedIP = ipAddresses[i]
 			}
 
 			// Append to network info

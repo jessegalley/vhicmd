@@ -1,15 +1,17 @@
 # vhicmd
 
-A command-line utility for interacting with VHI (Virtual Hosting Infrastructure) APIs. This tool provides a streamlined interface for managing virtual machines, volumes, networks.
+A command-line utility for interacting with VHI (Virtuozzo Hybrid Infrastructure) APIs. This tool provides a streamlined interface for managing virtual machines, volumes, networks, and other OpenStack resources.
 
 ## Features
 
-- Resource listing (VMs, volumes, networks, flavors, images)
+- Authentication and project management
+- Resource listing (VMs, volumes, networks, flavors, images, ports)
 - Detailed resource information
-- VM creation
-- Volume creation
-- Reboot VM (hard, soft)
-- TODO: Delete & update resources
+- VM creation, deletion, and management
+- Volume creation and management
+- Network and port management
+- Image management and sharing
+- VM migration from VMware environments
 
 ## Build & Installation
 
@@ -20,7 +22,7 @@ cd bin && mv vhicmd /usr/local/bin
 
 ## Configuration
 
-vhicmd uses a configuration file located at `~/.vhirc` (YAML format by default).
+vhicmd uses a configuration file located at `~/.vhirc` (YAML format).
 
 Example configuration:
 ```yaml
@@ -34,28 +36,21 @@ flavor_id: flavor-uuid
 image_id: image-uuid
 ```
 
-Explanation:
+Configuration Options:
 - `host`: VHI host URL
 - `domain`: VHI domain
 - `project`: VHI project
 - `username`: VHI username
-- `password`: VHI password
-- `networks`: Default networks to use for VM creation
-- `flavor_id`: Default flavor to use for VM creation
-- `image_id`: Default image to use for VM creation
+- `password`: VHI password (optional)
+- `networks`: Default networks for VM creation
+- `flavor_id`: Default flavor for VM creation
+- `image_id`: Default image for VM creation
 
-Configuration can be managed using:
+Manage configuration:
 ```bash
 vhicmd config list                # Show current config
-vhicmd config get <key>          # Get specific value
-vhicmd config set <key> <value>  # Set specific value
-```
-
-Configuration can also be set via environment variables by prefixing with `VHI_`:
-```bash
-export VHI_HOST=panel-vhi1.yourhost.com
-export VHI_USERNAME=user
-export VHI_PASSWORD=pass
+vhicmd config get <key>           # Get specific value
+vhicmd config set <key> <value>   # Set specific value
 ```
 
 ## Authentication
@@ -64,74 +59,172 @@ export VHI_PASSWORD=pass
 # Using config file values
 vhicmd auth
 
-# Prompt for username and password
-# * Note: domain and project are required, this will also prompt to save the values to `~/.vhirc` for future use.
+# Interactive authentication with prompts
 vhicmd auth <domain> <project> --host <vhi host>
 
-# Override with command line
+# Command line authentication
 vhicmd auth <domain> <project> -u username -p password
+
+# Switch between projects
+vhicmd switch-project [project]   # Interactive if no project specified
 ```
 
-Tokens are saved to `~/.vhicmd.token` and can be refreshed with `vhicmd auth`.
+## Resource Management Commands
 
-## Basic Commands
+### Basic Operations
 
-After authentication, you can start using the tool.
-Note that UUIDs are used to identify resources (VMs, volumes, networks, flavors, images).
-
-Show catalog:
+View service catalog:
 ```bash
-vhicmd catalog
-```
-
-Reboot VM:
-```bash
-vhicmd reboot <vm-id> <soft/hard>
+vhicmd catalog [--interface public|admin|internal]
 ```
 
 List resources:
 ```bash
-vhicmd list vms
+vhicmd list domains              # Admin only
+vhicmd list projects
+vhicmd list vms [--name filter]
 vhicmd list volumes
-vhicmd list networks
+vhicmd list networks [--name filter]
+vhicmd list ports
 vhicmd list flavors
-vhicmd list images
+vhicmd list images [--name filter] [--visibility public|private|shared]
+vhicmd list image-members <image>
 ```
 
 Get detailed information:
 ```bash
 vhicmd details vm <vm-id>
+vhicmd details volume <volume-id>
+vhicmd details image <image-id>
+vhicmd details port <port-id>
 ```
 
-Create resources:
+### Virtual Machine Management
+
+Create VM:
 ```bash
-# Create VM
-# * Note: networks is a comma-separated list of UUIDs
-vhicmd create vm --name test-vm --flavor <flavor-id> --image <image-id> --networks <network-ids> --ips <ips-csv> --size <size-in-GB>
-
-# Create VM with netboot enabled, this will create a blank volume instead of using an image (deprecated)
-vhicmd create vm --name test-vm --flavor <flavor-id> --networks <network-ids> --ips <ip-csv> --size <size-in-GB> --netboot true
-
-# Create VM with config values from `~/.vhirc`
-vhicmd create vm --name test-vm --size <size-in-GB> --ips <ips-csv>
-
-# Create Volume
-vhicmd create volume --name test-vol --size 10
+vhicmd create vm --name <name> \
+  --flavor <flavor-id> \
+  --image <image-id> \
+  --networks <network-ids> \
+  --ips <ip-addresses> \
+  --size <size-GB> \
+  --user-data <cloud-init-file> \
+  --macaddr <mac-addresses>
 ```
 
-Make volume bootable:
+Delete VM:
 ```bash
-vhicmd bootable <volume-id> true/false
+vhicmd delete vm <vm-id>
 ```
 
-After creating a VM, `vhicmd` will print the VM ID, IP/MAC addresses, and other relevant information.
-
-Manage netboot:
+Update VM:
 ```bash
-vhicmd netboot set <vm-id> true/false
+vhicmd update vm name <vm-id> <new-name>
+vhicmd update vm metadata <vm-id> <key> <value>
+```
+
+Manage VM flavor:
+```bash
+vhicmd update vm flavor start <vm-id> <new-flavor>     # Start flavor change
+vhicmd update vm flavor confirm <vm-id>                # Confirm change
+vhicmd update vm flavor revert <vm-id>                 # Revert change
+```
+
+Reboot VM:
+```bash
+vhicmd reboot soft <vm-id>
+vhicmd reboot hard <vm-id>
+```
+
+Network interfaces:
+```bash
+vhicmd update vm attach-port <vm-id> <port-id>
+vhicmd update vm detach-port <vm-id> <port-id>
+```
+
+### Storage Management
+
+Create volume:
+```bash
+vhicmd create volume --name <name> \
+  --size <size-GB> \
+  --type <volume-type> \
+  --description <description>
+```
+
+Delete volume:
+```bash
+vhicmd delete volume <volume-id>
+```
+
+Manage bootable flag:
+```bash
+vhicmd bootable <volume-id> true|false
+```
+
+### Image Management
+
+Create image:
+```bash
+vhicmd create image --file <path> \
+  --name <name> \
+  [--format qcow2|raw|vmdk|iso]
+```
+
+Delete image:
+```bash
+vhicmd delete image <image-id>
+```
+
+Image sharing:
+```bash
+vhicmd add image-member <image> <project-id>      # Grant access
+vhicmd delete image-member <image> <project-id>   # Revoke access
+vhicmd update image member <image> <member-id> <status>  # Update member status
+vhicmd update image visibility <image> <visibility>       # Update visibility
+```
+
+### Network Management
+
+Create port:
+```bash
+vhicmd create port --network <network-id> [--mac <mac-address>]
+```
+
+Delete port:
+```bash
+vhicmd delete port <port-id>
+```
+
+### VM Migration
+
+Migrate from VMware:
+```bash
+vhicmd migrate vm \
+  --name <name> \
+  --vmdk <path> \
+  --flavor <flavor> \
+  --networks <networks> \
+  --mac <mac-addresses> \
+  --size <size-GB> \
+  [--shutdown] \
+  [--disk-bus sata|scsi|virtio]
+```
+
+Find VMDK files:
+```bash
+vhicmd migrate find <pattern> [--single]
 ```
 
 ## Global Flags
 
 - `-H, --host`: Override the VHI host
-- `--json`: Output in JSON format instead of tables
+- `--config`: Specify alternate config file
+- `--debug`: Enable debug mode
+- `--json`: Output in JSON format (available for list/details commands)
+
+## Notes
+
+- Most commands accept either resource IDs or names
+- `vhicmd` supports networks with IPAM disabled which allows manually specifying MAC addresses as a normal user when creating a port
